@@ -12,6 +12,17 @@ const DEFAULT_CHANNEL_SERVICE_NAME = "onyxclaw-channel-lb";
 const SECRET_NAME = "onyxclaw-app-runtime";
 const CONFIG_NAME = "onyxclaw-provider-config";
 const MANAGED_BY = "onyxclaw-one-click";
+const DEPLOYMENT_REGION = "cn-south-1";
+const DEPLOYMENT_NAMESPACE = "onyxclaw";
+const APP_IMAGE =
+  "swr.cn-south-1.myhuaweicloud.com/demo-test/onyxclaw-app:0.3.8-session-routing-debug-nodelay-wait5s-v19@sha256:fe0c5274fff79897fce53634756694edc9799f393e3e3dde416d604749788293";
+const AGENTSPHERE_TEMPLATE_IMAGE =
+  "swr.cn-south-1.myhuaweicloud.com/demo-test/onyxclaw-openclaw:0.3.8-channel-error-fix";
+const AGENTSPHERE_API_URL = "https://agentsphere.cn-south-1.myhuaweicloud.com";
+const CHANNEL_ELB_ANNOTATIONS = {
+  "kubernetes.io/elb.class": "union",
+  "kubernetes.io/elb.autocreate": "{\"type\":\"inner\",\"name\":\"onyxclaw-channel\"}",
+};
 
 function resourceLabels(extra = {}) {
   return {
@@ -49,20 +60,6 @@ function required(values, name) {
   return value;
 }
 
-function positiveInteger(value, name) {
-  const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed <= 0) {
-    throw new Error(`${name} must be a positive integer`);
-  }
-  return parsed;
-}
-
-function booleanValue(value, name) {
-  if (value === "true") return true;
-  if (value === "false") return false;
-  throw new Error(`${name} must be true or false`);
-}
-
 function urlValue(value, name, protocols) {
   let parsed;
   try {
@@ -74,22 +71,6 @@ function urlValue(value, name, protocols) {
     throw new Error(`${name} must use ${protocols.join(" or ")}`);
   }
   return parsed.toString().replace(/\/$/, "");
-}
-
-function parseJsonObject(value, name) {
-  let parsed;
-  try {
-    parsed = JSON.parse(value || "{}");
-  } catch (error) {
-    throw new Error(`${name} must be valid JSON: ${error.message}`);
-  }
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error(`${name} must be a JSON object`);
-  }
-  for (const [key, item] of Object.entries(parsed)) {
-    if (typeof item !== "string") throw new Error(`${name}.${key} must be a string`);
-  }
-  return parsed;
 }
 
 function validateBaseConfig(baseConfig, config) {
@@ -111,100 +92,49 @@ function validateBaseConfig(baseConfig, config) {
 }
 
 function normalizedConfig(raw) {
-  const appServiceType = raw.APP_SERVICE_TYPE || "NodePort";
-  const channelServiceType = raw.CHANNEL_SERVICE_TYPE || "LoadBalancer";
-  for (const [name, value] of [
-    ["APP_SERVICE_TYPE", appServiceType],
-    ["CHANNEL_SERVICE_TYPE", channelServiceType],
-  ]) {
-    if (!["LoadBalancer", "NodePort", "ClusterIP"].includes(value)) {
-      throw new Error(`${name} must be LoadBalancer, NodePort, or ClusterIP`);
-    }
-  }
-  const sandboxOnTimeout = raw.SANDBOX_ON_TIMEOUT || "pause";
-  const cleanupPolicy = raw.CLEANUP_POLICY || "kill";
-  if (!["pause", "kill"].includes(sandboxOnTimeout)) {
-    throw new Error("SANDBOX_ON_TIMEOUT must be pause or kill");
-  }
-  if (!["pause", "kill", "keep-running"].includes(cleanupPolicy)) {
-    throw new Error("CLEANUP_POLICY must be pause, kill, or keep-running");
-  }
-
   const config = {
-    ...raw,
-    KUBE_CONTEXT: required(raw, "KUBE_CONTEXT"),
+    KUBE_CONTEXT: raw.KUBE_CONTEXT?.trim() || "",
     KUBECONFIG: required(raw, "KUBECONFIG"),
-    NAMESPACE: required(raw, "NAMESPACE"),
-    REGION: required(raw, "REGION"),
-    APP_IMAGE: required(raw, "APP_IMAGE"),
-    REPLICAS: positiveInteger(raw.REPLICAS || "1", "REPLICAS"),
-    AGENTSPHERE_API_URL: urlValue(
-      required(raw, "AGENTSPHERE_API_URL"),
-      "AGENTSPHERE_API_URL",
-      ["https:", "http:"],
-    ),
+    NAMESPACE: raw.NAMESPACE?.trim() || DEPLOYMENT_NAMESPACE,
+    REGION: DEPLOYMENT_REGION,
+    APP_IMAGE,
+    REPLICAS: 1,
+    AGENTSPHERE_API_URL,
     AGENTSPHERE_SANDBOX_URL: urlValue(
       required(raw, "AGENTSPHERE_SANDBOX_URL"),
       "AGENTSPHERE_SANDBOX_URL",
       ["https:", "http:"],
     ),
     AGENTSPHERE_TEMPLATE_ID: required(raw, "AGENTSPHERE_TEMPLATE_ID"),
-    AGENTSPHERE_TEMPLATE_IMAGE: required(raw, "AGENTSPHERE_TEMPLATE_IMAGE"),
-    AGENTSPHERE_TEMPLATE_READY: booleanValue(
-      raw.AGENTSPHERE_TEMPLATE_READY || "false",
-      "AGENTSPHERE_TEMPLATE_READY",
-    ),
-    APP_SERVICE_TYPE: appServiceType,
-    APP_SERVICE_ANNOTATIONS: parseJsonObject(
-      raw.APP_SERVICE_ANNOTATIONS_JSON || "{}",
-      "APP_SERVICE_ANNOTATIONS_JSON",
-    ),
-    APP_NODE_PORT: raw.APP_NODE_PORT
-      ? positiveInteger(raw.APP_NODE_PORT, "APP_NODE_PORT")
-      : null,
-    APP_PUBLIC_URL: raw.APP_PUBLIC_URL || "",
-    CHANNEL_SERVICE_TYPE: channelServiceType,
-    CHANNEL_SERVICE_NAME: raw.CHANNEL_SERVICE_NAME || DEFAULT_CHANNEL_SERVICE_NAME,
-    CHANNEL_SERVICE_ANNOTATIONS: parseJsonObject(
-      raw.CHANNEL_SERVICE_ANNOTATIONS_JSON || "{}",
-      "CHANNEL_SERVICE_ANNOTATIONS_JSON",
-    ),
-    APP_SERVICE_PORT: positiveInteger(raw.APP_SERVICE_PORT || "3000", "APP_SERVICE_PORT"),
-    CHANNEL_SERVICE_PORT: positiveInteger(
-      raw.CHANNEL_SERVICE_PORT || "18890",
-      "CHANNEL_SERVICE_PORT",
-    ),
-    CHANNEL_PUBLIC_URL: raw.CHANNEL_PUBLIC_URL || "auto",
-    MODEL_PROVIDER: required(raw, "MODEL_PROVIDER"),
-    MODEL_ID: required(raw, "MODEL_ID"),
-    SANDBOX_ON_TIMEOUT: sandboxOnTimeout,
-    CLEANUP_POLICY: cleanupPolicy,
-    PAUSE_RESUME: booleanValue(raw.PAUSE_RESUME || "false", "PAUSE_RESUME"),
-    MEMORY_PERSISTENCE: booleanValue(
-      raw.MEMORY_PERSISTENCE || "false",
-      "MEMORY_PERSISTENCE",
-    ),
+    AGENTSPHERE_TEMPLATE_IMAGE,
+    APP_SERVICE_TYPE: "NodePort",
+    APP_SERVICE_ANNOTATIONS: {},
+    APP_NODE_PORT: 30080,
+    APP_PUBLIC_URL: "",
+    CHANNEL_SERVICE_TYPE: "LoadBalancer",
+    CHANNEL_SERVICE_NAME: DEFAULT_CHANNEL_SERVICE_NAME,
+    CHANNEL_SERVICE_ANNOTATIONS: CHANNEL_ELB_ANNOTATIONS,
+    APP_SERVICE_PORT: 3000,
+    CHANNEL_SERVICE_PORT: 18890,
+    CHANNEL_PUBLIC_URL: "auto",
+    MODEL_PROVIDER: "deepseek",
+    MODEL_ID: "deepseek-v4-flash",
+    SANDBOX_ON_TIMEOUT: "pause",
+    CLEANUP_POLICY: "kill",
+    PAUSE_RESUME: true,
+    MEMORY_PERSISTENCE: true,
     SFS_TURBO_ID: required(raw, "SFS_TURBO_ID"),
-    SFS_SHARE_PATH: required(raw, "SFS_SHARE_PATH"),
-    SFS_MOUNT_DIR: raw.SFS_MOUNT_DIR || "/home/node/.openclaw/workspace",
-    CPU_REQUEST: raw.CPU_REQUEST || "100m",
-    MEMORY_REQUEST: raw.MEMORY_REQUEST || "128Mi",
-    CPU_LIMIT: raw.CPU_LIMIT || "1",
-    MEMORY_LIMIT: raw.MEMORY_LIMIT || "1Gi",
+    SFS_SHARE_PATH: "/onyxclaw/workspace",
+    SFS_MOUNT_DIR: "/home/node/.openclaw/workspace",
+    CPU_REQUEST: "100m",
+    MEMORY_REQUEST: "128Mi",
+    CPU_LIMIT: "1",
+    MEMORY_LIMIT: "1Gi",
+    OPENCLAW_BASE_CONFIG_FILE: "./openclaw-base-config.json",
   };
 
   if (!/@sha256:[0-9a-f]{64}$/i.test(config.APP_IMAGE)) {
     throw new Error("APP_IMAGE must be an immutable image@sha256:<64-hex-digest> reference");
-  }
-  if (!/@sha256:[0-9a-f]{64}$/i.test(config.AGENTSPHERE_TEMPLATE_IMAGE)) {
-    throw new Error(
-      "AGENTSPHERE_TEMPLATE_IMAGE must be an immutable image@sha256:<64-hex-digest> reference",
-    );
-  }
-  if (!config.AGENTSPHERE_TEMPLATE_READY) {
-    throw new Error(
-      "AGENTSPHERE_TEMPLATE_READY must be true after the Template is created manually",
-    );
   }
   if (!path.isAbsolute(config.KUBECONFIG)) {
     throw new Error("KUBECONFIG must be an absolute path");
@@ -215,59 +145,6 @@ function normalizedConfig(raw) {
   }
   if (!/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(config.CHANNEL_SERVICE_NAME)) {
     throw new Error("CHANNEL_SERVICE_NAME must be a valid Kubernetes resource name");
-  }
-  if (config.CHANNEL_PUBLIC_URL !== "auto") {
-    config.CHANNEL_PUBLIC_URL = urlValue(
-      config.CHANNEL_PUBLIC_URL,
-      "CHANNEL_PUBLIC_URL",
-      ["wss:", "ws:"],
-    );
-  } else if (config.CHANNEL_SERVICE_TYPE !== "LoadBalancer") {
-    throw new Error("CHANNEL_PUBLIC_URL=auto requires CHANNEL_SERVICE_TYPE=LoadBalancer");
-  }
-  if (config.APP_PUBLIC_URL) {
-    config.APP_PUBLIC_URL = urlValue(
-      config.APP_PUBLIC_URL,
-      "APP_PUBLIC_URL",
-      ["https:", "http:"],
-    );
-  }
-  if (
-    config.CHANNEL_SERVICE_TYPE === "LoadBalancer" &&
-    !config.CHANNEL_SERVICE_ANNOTATIONS["kubernetes.io/elb.id"] &&
-    !config.CHANNEL_SERVICE_ANNOTATIONS["kubernetes.io/elb.autocreate"]
-  ) {
-    throw new Error(
-      "CHANNEL_SERVICE_ANNOTATIONS_JSON must configure kubernetes.io/elb.id or kubernetes.io/elb.autocreate",
-    );
-  }
-  if (
-    config.CHANNEL_SERVICE_ANNOTATIONS["kubernetes.io/elb.id"] &&
-    config.CHANNEL_SERVICE_ANNOTATIONS["kubernetes.io/elb.autocreate"]
-  ) {
-    throw new Error(
-      "CHANNEL_SERVICE_ANNOTATIONS_JSON must not configure both kubernetes.io/elb.id and kubernetes.io/elb.autocreate",
-    );
-  }
-  if (config.CHANNEL_SERVICE_ANNOTATIONS["kubernetes.io/elb.autocreate"]) {
-    parseJsonObject(
-      config.CHANNEL_SERVICE_ANNOTATIONS["kubernetes.io/elb.autocreate"],
-      "CHANNEL_SERVICE_ANNOTATIONS_JSON.kubernetes.io/elb.autocreate",
-    );
-  }
-  for (const [key, value] of Object.entries(config.CHANNEL_SERVICE_ANNOTATIONS)) {
-    if (/^<.*>$/.test(value) || value.includes("<private-elb-id>")) {
-      throw new Error(`CHANNEL_SERVICE_ANNOTATIONS_JSON.${key} contains an example placeholder`);
-    }
-  }
-  if (!config.PAUSE_RESUME) {
-    throw new Error("PAUSE_RESUME must be true for the AgentSphere deployment profile");
-  }
-  if (!config.MEMORY_PERSISTENCE) {
-    throw new Error("MEMORY_PERSISTENCE must be true because SFS Turbo is required");
-  }
-  if (config.SANDBOX_ON_TIMEOUT !== "pause") {
-    throw new Error("SANDBOX_ON_TIMEOUT must be pause for the AgentSphere deployment profile");
   }
   return config;
 }
@@ -686,14 +563,17 @@ function assertNoForeignResourceCollisions(config) {
 
 function clusterPreflight(config, { checkOwnership = true } = {}) {
   runKubectl(config, ["version", "--client=true"]);
-  const context = runKubectl(
+  const context = config.KUBE_CONTEXT || runKubectl(
     config,
-    ["config", "get-contexts", config.KUBE_CONTEXT, "-o", "name"],
+    ["config", "current-context"],
     { capture: true },
   ).trim();
-  if (context !== config.KUBE_CONTEXT) {
-    throw new Error(`kubeconfig does not contain context ${config.KUBE_CONTEXT}`);
-  }
+  if (!context) throw new Error("kubeconfig does not define a current context; set optional KUBE_CONTEXT");
+  const configured = runKubectl(config, ["config", "get-contexts", context, "-o", "name"], {
+    capture: true,
+  }).trim();
+  if (configured !== context) throw new Error(`kubeconfig does not contain context ${context}`);
+  config.KUBE_CONTEXT = context;
   runKubectl(config, ["cluster-info"]);
 
   assertCanI(config, "get", "namespaces", false);
@@ -767,7 +647,7 @@ function usage() {
   return `Usage: node scripts/deploy.mjs --config config/config.env --secrets config/secrets.env [--dry-run|--check-cluster|--server-dry-run]\n\n` +
     "--dry-run validates inputs and prints only non-secret resource summaries.\n" +
     "--check-cluster runs read-only CCE connectivity, RBAC, and ownership checks.\n" +
-    "--server-dry-run creates NAMESPACE when missing, then asks the CCE API Server to validate all other resources without persisting them.";
+    "--server-dry-run creates the default onyxclaw namespace when missing, then asks the CCE API Server to validate all other resources without persisting them.";
 }
 
 function parseArgs(argv) {
@@ -803,17 +683,22 @@ async function main(argv = process.argv.slice(2)) {
   const config = normalizedConfig(rawConfig);
   required(secrets, "AGENTSPHERE_E2B_API_KEY");
   required(secrets, "MODEL_API_KEY");
-  required(secrets, "CHANNEL_SIGNING_SECRET");
-  required(secrets, "OPENCLAW_GATEWAY_TOKEN");
+  const runtimeSecrets = {
+    ...secrets,
+    CHANNEL_SIGNING_SECRET: "placeholder",
+    OPENCLAW_GATEWAY_TOKEN: "placeholder",
+  };
 
   const baseConfigPath = path.resolve(
     path.dirname(path.resolve(args.configPath)),
-    required(rawConfig, "OPENCLAW_BASE_CONFIG_FILE"),
+    config.OPENCLAW_BASE_CONFIG_FILE,
   );
   const baseConfig = JSON.parse(await readFile(baseConfigPath, "utf8"));
   validateBaseConfig(baseConfig, config);
 
-  console.log(`Target: context=${config.KUBE_CONTEXT} namespace=${config.NAMESPACE}`);
+  console.log(
+    `Target: context=${config.KUBE_CONTEXT || "<kubeconfig current-context>"} namespace=${config.NAMESPACE}`,
+  );
   console.log(`APP image: ${config.APP_IMAGE}`);
   console.log(`AgentSphere template image: ${config.AGENTSPHERE_TEMPLATE_IMAGE}`);
   console.log(`AgentSphere template: ${config.AGENTSPHERE_TEMPLATE_ID}`);
@@ -821,7 +706,7 @@ async function main(argv = process.argv.slice(2)) {
     const channel = config.CHANNEL_PUBLIC_URL === "auto"
       ? `ws://<cce-load-balancer>:${config.CHANNEL_SERVICE_PORT}/connect`
       : config.CHANNEL_PUBLIC_URL;
-    const resources = buildResources({ config, secrets, baseConfig, channelPublicUrl: channel });
+    const resources = buildResources({ config, secrets: runtimeSecrets, baseConfig, channelPublicUrl: channel });
     console.log(
       JSON.stringify(
         {
@@ -848,7 +733,7 @@ async function main(argv = process.argv.slice(2)) {
     const channelPublicUrl = config.CHANNEL_PUBLIC_URL === "auto"
       ? `ws://127.0.0.1:${config.CHANNEL_SERVICE_PORT}/connect`
       : config.CHANNEL_PUBLIC_URL;
-    const resources = buildResources({ config, secrets, baseConfig, channelPublicUrl });
+    const resources = buildResources({ config, secrets: runtimeSecrets, baseConfig, channelPublicUrl });
     const plan = serverDryRunPlan(resources, namespaceExists);
     if (plan.namespaceToCreate) {
       applyResource(config, plan.namespaceToCreate);
@@ -870,7 +755,7 @@ async function main(argv = process.argv.slice(2)) {
   if (args.checkCluster) return;
   const initialResources = buildResources({
     config,
-    secrets,
+    secrets: runtimeSecrets,
     baseConfig,
     channelPublicUrl:
       config.CHANNEL_PUBLIC_URL === "auto"
@@ -889,7 +774,7 @@ async function main(argv = process.argv.slice(2)) {
     channelPublicUrl = `ws://${address}:${config.CHANNEL_SERVICE_PORT}/connect`;
   }
 
-  const resources = buildResources({ config, secrets, baseConfig, channelPublicUrl });
+  const resources = buildResources({ config, secrets: runtimeSecrets, baseConfig, channelPublicUrl });
   applyResource(config, resources.configMap);
   applyResource(config, resources.secret);
   applyResource(config, resources.deployment);

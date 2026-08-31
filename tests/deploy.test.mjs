@@ -13,29 +13,10 @@ import {
 } from "../scripts/deploy.mjs";
 
 const rawConfig = {
-  KUBE_CONTEXT: "test-context",
   KUBECONFIG: "/tmp/test-kubeconfig.yaml",
-  NAMESPACE: "onyxclaw-test",
-  REGION: "cn-south-1",
-  APP_IMAGE: `swr.example.test/onyxclaw/app@sha256:${"a".repeat(64)}`,
-  AGENTSPHERE_API_URL: "https://agentsphere.example.test",
   AGENTSPHERE_SANDBOX_URL: "https://sandbox.example.test",
-  AGENTSPHERE_TEMPLATE_IMAGE:
-    `swr.example.test/onyxclaw/openclaw@sha256:${"b".repeat(64)}`,
   AGENTSPHERE_TEMPLATE_ID: "template-123",
-  AGENTSPHERE_TEMPLATE_READY: "true",
-  APP_SERVICE_TYPE: "NodePort",
-  APP_NODE_PORT: "30080",
-  CHANNEL_SERVICE_TYPE: "LoadBalancer",
-  CHANNEL_SERVICE_ANNOTATIONS_JSON:
-    '{"kubernetes.io/elb.id":"elb-123","kubernetes.io/elb.class":"union"}',
-  CHANNEL_PUBLIC_URL: "auto",
-  MODEL_PROVIDER: "deepseek",
-  MODEL_ID: "deepseek-v4-flash",
-  PAUSE_RESUME: "true",
-  MEMORY_PERSISTENCE: "true",
   SFS_TURBO_ID: "sfs-123",
-  SFS_SHARE_PATH: "/onyxclaw/workspace",
 };
 
 const baseConfig = {
@@ -114,8 +95,8 @@ test("one-click config renders a private CCE deployment without embedding secret
   assert.equal(resources.appService.spec.ports[0].nodePort, 30080);
   assert.equal(resources.channelService.spec.type, "LoadBalancer");
   assert.equal(
-    resources.channelService.metadata.annotations["kubernetes.io/elb.id"],
-    "elb-123",
+    JSON.parse(resources.channelService.metadata.annotations["kubernetes.io/elb.autocreate"]).type,
+    "inner",
   );
   assert.deepEqual(resources.deployment.spec.template.spec.imagePullSecrets, undefined);
   for (const resource of [
@@ -133,92 +114,58 @@ test("one-click config renders a private CCE deployment without embedding secret
   }
 });
 
-test("auto Channel URL is rejected when CCE cannot allocate a LoadBalancer", () => {
-  assert.throws(
-    () => normalizedConfig({ ...rawConfig, CHANNEL_SERVICE_TYPE: "ClusterIP" }),
-    /requires CHANNEL_SERVICE_TYPE=LoadBalancer/,
+test("fixed profile always uses a LoadBalancer for the Channel", () => {
+  assert.equal(
+    normalizedConfig({ ...rawConfig, CHANNEL_SERVICE_TYPE: "ClusterIP" }).CHANNEL_SERVICE_TYPE,
+    "LoadBalancer",
   );
 });
 
-test("CCE can auto-create the private Channel ELB", () => {
-  const config = normalizedConfig({
-    ...rawConfig,
-    CHANNEL_SERVICE_ANNOTATIONS_JSON:
-      '{"kubernetes.io/elb.class":"union","kubernetes.io/elb.autocreate":"{\\"type\\":\\"inner\\",\\"name\\":\\"onyxclaw-channel\\"}"}',
-  });
+test("CCE auto-creates the private Channel ELB in the fixed profile", () => {
+  const config = normalizedConfig(rawConfig);
   assert.deepEqual(
     JSON.parse(config.CHANNEL_SERVICE_ANNOTATIONS["kubernetes.io/elb.autocreate"]),
     { type: "inner", name: "onyxclaw-channel" },
   );
 });
 
-test("Channel ELB annotations reject ambiguous or invalid auto-create settings", () => {
-  assert.throws(
-    () =>
-      normalizedConfig({
-        ...rawConfig,
-        CHANNEL_SERVICE_ANNOTATIONS_JSON:
-          '{"kubernetes.io/elb.id":"elb-123","kubernetes.io/elb.autocreate":"{\\"type\\":\\"inner\\"}"}',
-      }),
-    /must not configure both/,
-  );
-  assert.throws(
-    () =>
-      normalizedConfig({
-        ...rawConfig,
-        CHANNEL_SERVICE_ANNOTATIONS_JSON:
-          '{"kubernetes.io/elb.autocreate":"not-json"}',
-      }),
-    /elb\.autocreate must be valid JSON/,
-  );
-});
-
-test("mutable image tags and implicit cluster targets are rejected", () => {
-  assert.throws(
-    () => normalizedConfig({ ...rawConfig, APP_IMAGE: "swr.example.test/app:v19" }),
-    /immutable image/,
-  );
-  assert.throws(
-    () => normalizedConfig({ ...rawConfig, KUBE_CONTEXT: "" }),
-    /KUBE_CONTEXT is required/,
-  );
-  assert.throws(
-    () => normalizedConfig({ ...rawConfig, NAMESPACE: "" }),
-    /NAMESPACE is required/,
-  );
+test("fixed deployment settings cannot be changed through config.env", () => {
+  const config = normalizedConfig({
+    ...rawConfig,
+    APP_IMAGE: "swr.example.test/app:mutable",
+    REGION: "other-region",
+    CHANNEL_SERVICE_ANNOTATIONS_JSON: "{}",
+    MODEL_ID: "other-model",
+  });
+  assert.equal(config.REGION, "cn-south-1");
+  assert.match(config.APP_IMAGE, /@sha256:[0-9a-f]{64}$/);
+  assert.equal(config.MODEL_ID, "deepseek-v4-flash");
+  assert.equal(config.NAMESPACE, "onyxclaw");
+  assert.equal(config.KUBE_CONTEXT, "");
   assert.throws(
     () => normalizedConfig({ ...rawConfig, KUBECONFIG: "relative.yaml" }),
     /absolute path/,
   );
 });
 
-test("the supported AgentSphere profile requires pause/resume and SFS Turbo", () => {
-  assert.throws(
-    () => normalizedConfig({ ...rawConfig, PAUSE_RESUME: "false" }),
-    /PAUSE_RESUME must be true/,
-  );
-  assert.throws(
-    () => normalizedConfig({ ...rawConfig, MEMORY_PERSISTENCE: "false" }),
-    /MEMORY_PERSISTENCE must be true/,
-  );
+test("the fixed AgentSphere profile includes pause/resume and requires SFS Turbo", () => {
+  const config = normalizedConfig(rawConfig);
+  assert.equal(config.PAUSE_RESUME, true);
+  assert.equal(config.MEMORY_PERSISTENCE, true);
+  assert.equal(config.SANDBOX_ON_TIMEOUT, "pause");
   assert.throws(
     () => normalizedConfig({ ...rawConfig, SFS_TURBO_ID: "" }),
     /SFS_TURBO_ID is required/,
   );
-  assert.throws(
-    () => normalizedConfig({ ...rawConfig, SANDBOX_ON_TIMEOUT: "kill" }),
-    /must be pause/,
-  );
 });
 
-test("manual AgentSphere Template readiness is an explicit deployment gate", () => {
-  assert.throws(
-    () => normalizedConfig({ ...rawConfig, AGENTSPHERE_TEMPLATE_READY: "false" }),
-    /must be true/,
-  );
-  assert.throws(
-    () => normalizedConfig({ ...rawConfig, AGENTSPHERE_TEMPLATE_IMAGE: "image:latest" }),
-    /AGENTSPHERE_TEMPLATE_IMAGE must be an immutable image/,
+test("fixed public OpenClaw Template image is recorded independently of config.env", () => {
+  assert.equal(
+    normalizedConfig({
+      ...rawConfig,
+      AGENTSPHERE_TEMPLATE_IMAGE: "target-tenant.example.test/ignored:latest",
+    }).AGENTSPHERE_TEMPLATE_IMAGE,
+    "swr.cn-south-1.myhuaweicloud.com/demo-test/onyxclaw-openclaw:0.3.8-channel-error-fix",
   );
 });
 
@@ -273,7 +220,7 @@ test("server dry-run creates a missing configured namespace before validating na
   });
   const missing = serverDryRunPlan(resources, false);
   assert.equal(missing.namespaceToCreate.kind, "Namespace");
-  assert.equal(missing.namespaceToCreate.metadata.name, "onyxclaw-test");
+  assert.equal(missing.namespaceToCreate.metadata.name, "onyxclaw");
   assert.deepEqual(
     missing.resourcesToValidate.map((resource) => resource.kind),
     ["Service", "Service", "ConfigMap", "Secret", "Deployment"],
@@ -287,13 +234,13 @@ test("server dry-run creates a missing configured namespace before validating na
 test("runtime DNS validation targets both AgentSphere control and private data planes", () => {
   const config = normalizedConfig(rawConfig);
   assert.deepEqual(runtimeDnsHosts(config), [
-    "agentsphere.example.test",
+    "agentsphere.cn-south-1.myhuaweicloud.com",
     "sandbox.example.test",
   ]);
   assert.deepEqual(runtimeDnsHosts({
     ...config,
     AGENTSPHERE_SANDBOX_URL: config.AGENTSPHERE_API_URL,
-  }), ["agentsphere.example.test"]);
+  }), ["agentsphere.cn-south-1.myhuaweicloud.com"]);
 });
 
 test("deployed APP identity must match all requested cloud inputs", () => {

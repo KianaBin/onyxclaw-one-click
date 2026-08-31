@@ -1,0 +1,60 @@
+# This IaC path always creates a dedicated VPC and subnet. The console manual path remains documented separately.
+region            = "cn-south-1"
+availability_zone = "cn-south-1a"
+
+# These values must not overlap CCE Pod or Service CIDRs.
+vpc_name          = "onyxclaw-demo-vpc"
+vpc_cidr          = "192.168.0.0/16"
+subnet_name       = "onyxclaw-demo-subnet"
+subnet_cidr       = "192.168.0.0/24"
+subnet_gateway_ip = "192.168.0.1"
+
+# CCE Standard Demo/Test profile. Verify available versions, flavors, AZs, OS values and disk types in the target Region.
+cluster_name           = "onyxclaw-demo"
+cluster_flavor_id      = "cce.s1.small"
+cluster_version        = "v1.35"
+container_network_type = "vpc-router"
+container_network_cidr = "172.16.0.0/16"
+service_network_cidr   = "10.247.0.0/16"
+kube_proxy_mode        = "iptables"
+
+# The module creates and binds this EIP to the CCE API Server.
+api_server_eip_name           = "onyxclaw-demo-api"
+api_server_eip_bandwidth_mbps = 10
+
+# Existing key pair is recommended. For password login, omit worker_node_key_pair and fill
+# worker_node_password in the ignored secrets.auto.tfvars file.
+worker_node_name      = "onyxclaw-demo-node-1"
+worker_node_flavor_id = "c7.large.4"
+worker_node_os        = "Ubuntu 22.04"
+# worker_node_key_pair  = "<existing-key-pair-name>"
+
+worker_node_root_volume = {
+  size       = 50
+  volumetype = "SAS"
+}
+
+worker_node_data_volumes = [{
+  size       = 100
+  volumetype = "SAS"
+}]
+
+# Set false if no node EIP is needed. It is independent from the API Server EIP.
+enable_worker_node_eip        = true
+worker_node_eip_bandwidth_mbps = 5
+
+# Optional Terraform-managed egress for the AgentSphere Sandbox subnet. This creates a public NAT Gateway,
+# a dedicated EIP, and the subnet SNAT rule. It is distinct from the API Server and node EIPs.
+manage_snat            = true
+nat_gateway_name       = "onyxclaw-demo-nat"
+nat_gateway_spec       = "1"
+snat_eip_name          = "onyxclaw-demo-snat"
+snat_eip_bandwidth_mbps = 10
+
+# Optional Terraform-managed SFS Turbo. This creates a dedicated SFS security group and a NFS PERFORMANCE
+# file system in the selected VPC/subnet/AZ. After apply, use its outputs with scripts/prepare-sfs.sh.
+manage_sfs             = true
+sfs_name               = "sfs-onyxclaw-demo"
+sfs_size_gb            = 500
+sfs_share_type         = "PERFORMANCE"
+sfs_security_group_name = "sg-onyxclaw-sfs"

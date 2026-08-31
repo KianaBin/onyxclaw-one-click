@@ -17,10 +17,9 @@ AgentSphere Sandbox。用户流程包括创建 Sandbox、确认 `SOUL.md`、等�
 | Cloud APP | `swr.cn-south-1.myhuaweicloud.com/demo-test/onyxclaw-app:0.3.8-session-routing-debug-nodelay-wait5s-v19` | `sha256:fe0c5274fff79897fce53634756694edc9799f393e3e3dde416d604749788293` | 当前 Ready Pod 的 `imageID` |
 | AgentSphere OpenClaw | `swr.cn-south-1.myhuaweicloud.com/demo-test/onyxclaw-openclaw:0.3.8-channel-error-fix` | `sha256:d29c37290298d374dd6438ae92ee2def3dadf9e1f7599704f341483c302442b5` | 用户确认当前 Template 由该稳定镜像创建；digest 来自仓库构建记录 |
 
-两张源镜像均为公开镜像，可以直接拉取。CCE APP 可直接固定使用公开源镜像；AgentSphere Template
-若要求本租户 SWR 镜像，必须先把 OpenClaw 镜像复制到目标租户的同 Region SWR。复制后的仓库地址会
-改变，但 digest 应仍为上表的 `sha256:d29c...42b5`。目标部署使用 `image@sha256:...`，不得仅凭 tag
-名称推断内容一致。
+两张源镜像均为公开镜像，可以直接拉取。CCE APP 固定使用公开源镜像的不可变 digest；创建
+AgentSphere Template 时，在“选择镜像”直接填写上表的 OpenClaw tag。无需把它复制到目标租户的 SWR，
+也无需将目标租户 `image@sha256` 写入本包配置。
 
 ## CCE 只读盘点
 

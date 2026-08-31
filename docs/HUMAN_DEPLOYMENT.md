@@ -37,31 +37,28 @@ AgentSphere 控制台人工完成。
 
 | 文件 | 填什么 | 是否敏感 |
 | --- | --- | --- |
-| `config/config.env` | 集群、网络、AgentSphere、SFS、镜像与模型的非密钥参数 | 有环境信息，不提交 |
+| `config/config.env` | 目标集群、AgentSphere 与 SFS 的四项环境信息 | 有环境信息，不提交 |
 | `config/secrets.env` | AgentSphere E2B API Key、模型 API Key | 是，不提交、不分享 |
-| `config/openclaw-base-config.json` | OpenClaw 模型 Provider、模型名称和占位符配置 | 运行时会注入密钥，不提交 |
+| `config/openclaw-base-config.json` | 随包生成的固定 DeepSeek/OpenClaw 基础配置 | 运行时会注入密钥；首次部署不需要编辑 |
 
 ### `config/config.env` 必填项
 
 | 分组 | 字段 | 说明 |
 | --- | --- | --- |
 | CCE | `KUBECONFIG` | 从 CCE 控制台导出的 kubeconfig **绝对路径**。 |
-| CCE | `KUBE_CONTEXT`、`NAMESPACE`、`REGION` | 指定唯一目标集群、首次部署要创建的 namespace、区域代码。 |
-| AgentSphere | `AGENTSPHERE_API_URL` | 控制面地址。华南-广州使用 `https://agentsphere.cn-south-1.myhuaweicloud.com`。 |
-| AgentSphere | `AGENTSPHERE_SANDBOX_URL` | 开启私网访问的智能体网关私网数据面 URL。 |
-| AgentSphere | `AGENTSPHERE_TEMPLATE_IMAGE`、`AGENTSPHERE_TEMPLATE_ID` | 复制到目标租户 SWR 的 OpenClaw 不可变镜像地址及控制台创建后的 Template ID。 |
-| AgentSphere | `AGENTSPHERE_TEMPLATE_READY` | Template 创建并确认网关/VPC关联正确后改为 `true`。 |
-| Channel | `CHANNEL_SERVICE_ANNOTATIONS_JSON` | 新账号保留 `kubernetes.io/elb.autocreate` 示例；复用已有私网 ELB 才改为 `kubernetes.io/elb.id`，两者不可同时存在。 |
-| SFS | `SFS_TURBO_ID`、`SFS_SHARE_PATH`、`SFS_MOUNT_DIR` | 保留默认共享目录 `/onyxclaw/workspace` 和 Sandbox 挂载目录，文件系统 ID 改成目标值。 |
-| 模型 | `MODEL_PROVIDER`、`MODEL_ID` | 必须与 OpenClaw JSON 中的 Provider/主模型一致。 |
+| AgentSphere | `AGENTSPHERE_SANDBOX_URL` | 已开启私网访问的智能体网关私网数据面 URL。 |
+| AgentSphere | `AGENTSPHERE_TEMPLATE_ID` | 控制台创建后的 Template ID。Template 的“选择镜像”直接使用固定公开 OpenClaw tag，不需要在此文件填写镜像地址。 |
+| SFS | `SFS_TURBO_ID` | 同一 VPC 中 SFS Turbo 的文件系统 ID。 |
 
-保持 `APP_IMAGE` 的固定 digest 不变；`AGENTSPHERE_TEMPLATE_IMAGE` 只替换为目标租户 SWR 地址，仍必须
-使用与稳定基线一致的 digest。`PAUSE_RESUME=true`、`MEMORY_PERSISTENCE=true`、`SANDBOX_ON_TIMEOUT=pause`
-是当前支持的必选配置。
+`config/secrets.env` 只需要用户填写 `AGENTSPHERE_E2B_API_KEY` 和 `MODEL_API_KEY`。不需要填写 Channel
+签名密钥或 Gateway token；部署器会使用内部占位符，稳定 APP 会在运行时初始化 Gateway token。
 
-`config/secrets.env` 中只需要用户填写 `AGENTSPHERE_E2B_API_KEY` 和 `MODEL_API_KEY`。
-`CHANNEL_SIGNING_SECRET`、`OPENCLAW_GATEWAY_TOKEN` 保持任意非空 `placeholder` 即可：前者只要求非空，后者会被
-稳定 APP 在运行时覆盖。
+为保证部署结果可复现，部署器固定使用华南-广州、`onyxclaw` namespace、已验证的 APP digest、DeepSeek
+`deepseek-v4-flash`、NodePort `30080`、以及由 CCE 自动创建的私网 Channel ELB（`18890/TCP`）。SFS
+workspace 固定为 `/onyxclaw/workspace`。这些不是首次部署的填写项。
+
+如果同一个 kubeconfig 保存多个集群，可额外填写可选 `KUBE_CONTEXT`；否则部署器使用该 kubeconfig 的
+`current-context`。需要隔离多个演示时也可选填 `NAMESPACE`，默认值为 `onyxclaw`。
 
 ## 2. 准备并验证 SFS Turbo
 
@@ -70,7 +67,6 @@ AgentSphere 控制台人工完成。
 ```bash
 ./scripts/prepare-sfs.sh \
   --kubeconfig /absolute/path/to/cce-kubeconfig.yaml \
-  --context <target-context> \
   --nfs-endpoint <sfs-console-shared-path> \
   --share-path /onyxclaw/workspace
 ```
@@ -86,7 +82,7 @@ AgentSphere 控制台人工完成。
 # 离线检查输入、固定 digest、URL、SFS、ELB 配置；不会连接集群
 node scripts/deploy.mjs --config config/config.env --secrets config/secrets.env --dry-run
 
-# 只读检查目标 kubeconfig/context、RBAC 和同名资源归属
+# 只读检查目标 kubeconfig/current-context、RBAC 和同名资源归属
 ./scripts/deploy.sh --check-cluster
 
 # 首次 namespace 不存在时只创建 namespace；其余资源走 API Server dry-run

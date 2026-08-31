@@ -12,7 +12,7 @@ Template ID 或密钥替代目标用户自己的输入。
 2. 为 Sandbox 子网创建 NAT Gateway、独立 SNAT EIP 和 SNAT 规则；
 3. 创建 NFS SFS Turbo，并通过 `scripts/prepare-sfs.sh` 获得
    `directory-owner=1000:1000` 与 `SFS_PREPARE_OK`；
-4. 启用并关联 AgentSphere 私网智能体网关，复制 OpenClaw 镜像到目标租户 SWR，创建 Template；
+4. 启用并关联 AgentSphere 私网智能体网关，在 Template 的“选择镜像”直接填写公开 OpenClaw tag，创建 Template；
 5. 使用本包的 `--dry-run`、`--check-cluster`、`--server-dry-run` 与正式部署完成新 namespace 首次发布；
 6. 创建两个测试 Sandbox；其中一个完整验证模型对话、pause/resume、SFS 人格持久化与 reset，另一个
    验证 create/pause/resume/reset；最终 APP 回到 idle。
@@ -40,8 +40,7 @@ Template ID 或密钥替代目标用户自己的输入。
 - APP Pod 内同时成功解析 AgentSphere **控制面**和智能体网关**私网数据面**域名，并能解析模型 Endpoint；
 - `/api/ui-config` 返回 `deploymentMode=cloud` 和
   `providerId=huaweicloud-agentsphere`；
-- 实际 OpenClaw 目标租户镜像 digest 与稳定基线
-  `sha256:d29c37290298d374dd6438ae92ee2def3dadf9e1f7599704f341483c302442b5` 一致；
+- Template 中填写的 OpenClaw 公开 tag 与稳定基线一致；
 - 重复运行正式部署成功，验证脚本具备预期幂等性。
 
 ## 功能验收证据
