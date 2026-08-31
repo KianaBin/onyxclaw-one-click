@@ -1,0 +1,5 @@
+config/config.env
+config/secrets.env
+config/openclaw-base-config.json
+*kubeconfig*.yaml
+.DS_Store
