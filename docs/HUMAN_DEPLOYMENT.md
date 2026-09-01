@@ -54,8 +54,8 @@ AgentSphere 控制台人工完成。
 签名密钥或 Gateway token；部署器会使用内部占位符，稳定 APP 会在运行时初始化 Gateway token。
 
 为保证部署结果可复现，部署器固定使用华南-广州、`onyxclaw` namespace、已验证的 APP digest、DeepSeek
-`deepseek-v4-flash`、NodePort `30080`、以及由 CCE 自动创建的私网 Channel ELB（`18890/TCP`）。SFS
-workspace 固定为 `/onyxclaw/workspace`。这些不是首次部署的填写项。
+`deepseek-v4-flash`、以及由 CCE 自动创建的私网 Channel ELB（`18890/TCP`）。默认 APP 入口是 NodePort
+`30080`；SFS workspace 固定为 `/onyxclaw/workspace`。这些不是首次部署的必填项。
 
 如果同一个 kubeconfig 保存多个集群，可额外填写可选 `KUBE_CONTEXT`；否则部署器使用该 kubeconfig 的
 `current-context`。需要隔离多个演示时也可选填 `NAMESPACE`，默认值为 `onyxclaw`。
@@ -98,6 +98,26 @@ node scripts/deploy.mjs --config config/config.env --secrets config/secrets.env 
 
 APP 默认以 NodePort `30080` 提供页面。Demo 可通过已授权来源的节点公网 EIP 访问，也可使用
 `kubectl port-forward`；不要为了方便把整个安全组开放到公网。
+
+若节点因 EIP 配额或账号策略无法绑定公网 EIP，在**首次部署前**将 `config/config.env` 中的可选项设为：
+
+```dotenv
+APP_ACCESS_MODE=public-elb
+```
+
+部署器会把 APP Service 创建为 `LoadBalancer`：CCE 自动创建公网共享型 ELB、为其申请并绑定 EIP，并将
+`80/TCP` 转发到 APP 的 `3000/TCP`。脚本等待 ELB 就绪后会输出 `APP URL: http://<elb-eip>`；以该地址打开
+页面。此时 Terraform 的 `enable_worker_node_eip` 可以设为 `false`，但账号仍要有足够 EIP 配额供 API Server、
+SNAT 与 APP ELB 使用。模式一旦创建，不得直接修改 Service 的 ELB 注解；如需切换，先确认业务影响并对明确的
+`service/onyxclaw-app` 执行单独迁移。
+
+| APP 浏览器入口 | `APP_ACCESS_MODE` | `enable_worker_node_eip` |
+| --- | --- | --- |
+| 节点 EIP + NodePort `30080`（默认） | 不填写（默认 `nodeport`） | `true` |
+| APP 公网 ELB + EIP | `public-elb` | 通常 `false` |
+
+公网 ELB 模式下只有需要直接 SSH 调试工作节点时，才保留 `enable_worker_node_eip = true`；这与浏览器访问 APP
+无关，并额外占用节点 EIP 配额。
 
 ## 4. 使用与端到端验收
 

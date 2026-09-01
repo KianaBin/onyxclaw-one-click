@@ -1,0 +1,4 @@
+interface:
+  display_name: "OnyxClaw CCE 部署"
+  short_description: "编排 CCE 与 AgentSphere 的受控部署和验收"
+  default_prompt: "使用 $onyxclaw-cce-deploy 按本仓库现有配置编排一次从预检到端到端验收的部署。"

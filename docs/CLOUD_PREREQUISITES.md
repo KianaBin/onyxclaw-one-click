@@ -58,9 +58,11 @@ terraform output
 ```
 
 `terraform.tfvars` 中至少按目标 Region/AZ 核对 CCE 版本、节点规格、节点登录方式、镜像/磁盘类型和 CIDR。
-若要以节点公网 EIP 的 `NodePort 30080` 访问 APP，保持 `enable_worker_node_eip = true`，并在申请前确认账户
-EIP 配额至少能覆盖：**API Server EIP、SNAT EIP、节点 EIP** 三项。节点 EIP 仅用于 SSH/NodePort 入站，不能代替
-Sandbox 的 SNAT EIP。
+浏览器入口有两种首次部署模式：默认保持 `enable_worker_node_eip = true`，通过节点公网 EIP 的 NodePort `30080`
+访问；如果节点不能绑定 EIP，则将其设为 `false`，并在后续 `config/config.env` 设置
+`APP_ACCESS_MODE=public-elb`。后者由 CCE 创建公网 APP ELB 并为它申请、绑定 EIP。两种模式都需要预留
+**API Server EIP、SNAT EIP、入口 EIP** 三条配额；节点 EIP 和 APP ELB EIP 二选一，且都不能代替 Sandbox 的
+SNAT EIP。
 
 为避免 SFS Turbo 名称冲突，给 `sfs_name` 设置一个本次测试唯一的名称。若首次 apply 只部分成功（例如 CCE 集群
 已创建但节点因 EIP 配额失败），不要复用旧 plan：先修复配置或配额，再重新执行 `terraform plan -out=cce-retry.plan`，
@@ -74,7 +76,7 @@ apply 成功后记录并映射这些输出，如下图表所示：
 | --- | --- |
 | `vpc_id`、`subnet_id` | 创建 AgentSphere 私网网关及 Template 的 VPC 模式网络选择。 |
 | `api_server_eip_address` | 从 CCE 控制台下载公网 kubeconfig 后，在部署机使用 `kubectl` 连接。 |
-| `worker_node_public_ip` | 可选 NodePort 浏览器入口：`http://<node-eip>:30080`。 |
+| `worker_node_public_ip` | `enable_worker_node_eip = true` 时的 NodePort 浏览器入口：`http://<node-eip>:30080`。若使用公网 APP ELB，此项为空是正常的。 |
 | `sfs_turbo_id`、`sfs_nfs_export_location` | 填写 `SFS_TURBO_ID`，并传给 `scripts/prepare-sfs.sh --nfs-endpoint`。 |
 | `snat_eip_address`、`nat_gateway_id` | 验证 Sandbox 的模型公网出网已具备独立 SNAT 路径。 |
 
@@ -112,10 +114,10 @@ kubeconfig 下载和验证步骤。
 4. 添加至少一个工作节点，等待其为 `Ready`；
 5. 在部署机验证 kubeconfig、context 与节点状态。
 
-注意：集群 API Server EIP、节点 SSH EIP、NAT/SNAT EIP 是三种不同用途的公网入口，不能混用。节点 EIP 仅在
-需要 SSH 或访问 APP NodePort 时配置；不用 SSH 时无需为部署脚本准备节点密码或密钥。Demo/Test 可使用
-2 vCPU/8 GiB、Ubuntu 22.04、containerd、50 GiB 系统盘和 100 GiB 数据盘的按需节点作为起点；生产应按
-可用性和容量设计节点规模。
+注意：集群 API Server EIP、节点 SSH/NodePort EIP、APP ELB EIP、NAT/SNAT EIP 用途各不相同，不能混用。
+节点 EIP 仅在需要 SSH 或访问 APP NodePort 时配置；若通过 APP 公网 ELB 访问页面，可不申请节点 EIP。
+不用 SSH 时无需为部署脚本准备节点密码或密钥。Demo/Test 可使用 2 vCPU/8 GiB、Ubuntu 22.04、containerd、
+50 GiB 系统盘和 100 GiB 数据盘的按需节点作为起点；生产应按可用性和容量设计节点规模。
 
 下载 kubeconfig 后收紧权限并确认：
 
@@ -215,6 +217,10 @@ AgentSphere/模型 API Key，以及 Sandbox 子网 SNAT 出网。回到 [人工�
 Channel 私网 ELB 不在本阶段预建。默认配置会由 CCE 在部署时自动创建共享型私网 ELB，并托管
 `18890/TCP` 监听器和后端；本交付包的固定首次部署方案不复用已有 ELB。相关机制见
 [CCE LoadBalancer Service annotations](https://support.huaweicloud.com/usermanual-cce/cce_10_0385.html)。
+
+APP 入口默认也不在本阶段预建：保持 NodePort 模式时通过节点 EIP 的 `30080/TCP` 打开页面。若节点无法绑定
+EIP，在首次 APP 部署前设置 `APP_ACCESS_MODE=public-elb`；部署器会由 CCE 自动创建公网 ELB 和其 EIP，完成后
+输出浏览器 URL。无需提前在 ELB 控制台创建监听器、后端或绑定另一条 EIP；但必须预留 EIP 配额。
 
 ## 费用与清理
 

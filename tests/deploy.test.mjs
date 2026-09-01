@@ -114,6 +114,45 @@ test("one-click config renders a private CCE deployment without embedding secret
   }
 });
 
+test("public-elb APP access allocates a public ELB EIP instead of a node NodePort", () => {
+  const config = normalizedConfig({ ...rawConfig, APP_ACCESS_MODE: "public-elb" });
+  const resources = buildResources({
+    config,
+    secrets: {
+      AGENTSPHERE_E2B_API_KEY: "e2b-secret",
+      MODEL_API_KEY: "model-secret",
+      CHANNEL_SIGNING_SECRET: "channel-secret",
+      OPENCLAW_GATEWAY_TOKEN: "gateway-secret",
+    },
+    baseConfig,
+    channelPublicUrl: "ws://192.168.1.50:18890/connect",
+  });
+
+  assert.equal(config.APP_PUBLIC_URL, "auto");
+  assert.equal(resources.appService.spec.type, "LoadBalancer");
+  assert.equal(resources.appService.spec.ports[0].port, 80);
+  assert.equal(resources.appService.spec.ports[0].nodePort, undefined);
+  assert.deepEqual(
+    JSON.parse(resources.appService.metadata.annotations["kubernetes.io/elb.autocreate"]),
+    {
+      type: "public",
+      name: "onyxclaw-app",
+      bandwidth_name: "onyxclaw-app-bandwidth",
+      bandwidth_chargemode: "traffic",
+      bandwidth_size: 5,
+      bandwidth_sharetype: "PER",
+      eip_type: "5_bgp",
+    },
+  );
+});
+
+test("APP access mode accepts only the supported first-deployment choices", () => {
+  assert.throws(
+    () => normalizedConfig({ ...rawConfig, APP_ACCESS_MODE: "ingress" }),
+    /APP_ACCESS_MODE must be nodeport or public-elb/,
+  );
+});
+
 test("fixed profile always uses a LoadBalancer for the Channel", () => {
   assert.equal(
     normalizedConfig({ ...rawConfig, CHANNEL_SERVICE_TYPE: "ClusterIP" }).CHANNEL_SERVICE_TYPE,
@@ -142,6 +181,7 @@ test("fixed deployment settings cannot be changed through config.env", () => {
   assert.equal(config.MODEL_ID, "deepseek-v4-flash");
   assert.equal(config.NAMESPACE, "onyxclaw");
   assert.equal(config.KUBE_CONTEXT, "");
+  assert.equal(config.APP_ACCESS_MODE, "nodeport");
   assert.throws(
     () => normalizedConfig({ ...rawConfig, KUBECONFIG: "relative.yaml" }),
     /absolute path/,

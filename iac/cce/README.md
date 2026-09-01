@@ -60,7 +60,18 @@ SFS Turbo ID/NFS 根路径，以及 AgentSphere 网关 URL 和 Template ID。
 ### Demo/Test 预检与常见恢复路径
 
 - 若要通过节点公网 IP 的 `NodePort 30080` 打开 APP，设置 `enable_worker_node_eip = true`，并预留 API Server、
-  SNAT、节点三条 EIP 配额。仅运行 kubectl 或使用 port-forward 时可设为 `false`。
+  SNAT、节点三条 EIP 配额。若节点无法绑定 EIP，设为 `false`，后续在唯一的 `config/config.env` 设置
+  `APP_ACCESS_MODE=public-elb`；APP 部署脚本会让 CCE 自动创建公网 ELB 并申请、绑定它自己的 EIP。该 EIP 不由
+  Terraform 管理，仍应预留 API Server、SNAT、APP ELB 三条 EIP 配额。仅运行 kubectl 或使用 port-forward 时可设为
+  `false` 且不启用公网 APP ELB。
+
+| APP 浏览器入口 | `APP_ACCESS_MODE` | `enable_worker_node_eip` |
+| --- | --- | --- |
+| 节点 EIP + NodePort `30080`（默认） | 不填写（默认 `nodeport`） | `true` |
+| APP 公网 ELB + EIP | `public-elb` | 通常 `false` |
+
+即使使用 APP 公网 ELB，仍可为了直接 SSH 调试而设置 `enable_worker_node_eip = true`；但它不是 APP 访问的要求，
+会额外申请节点 EIP。
 - 给 `sfs_name` 设置当前账号中未使用的名称；SFS Turbo 的同名创建会发生冲突。
 - apply 部分成功时，保留 state 和已创建资源；修复单个输入后重新生成 plan。例如：
 

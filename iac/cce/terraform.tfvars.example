@@ -39,7 +39,9 @@ worker_node_data_volumes = [{
   volumetype = "SAS"
 }]
 
-# Set false if no node EIP is needed. It is independent from the API Server EIP.
+# Set false when APP will use APP_ACCESS_MODE=public-elb, or when neither SSH nor NodePort is needed.
+# The public APP ELB EIP is created later by the Kubernetes deployment script, not Terraform.
+# It is independent from the API Server and SNAT EIPs.
 enable_worker_node_eip        = true
 worker_node_eip_bandwidth_mbps = 5
 

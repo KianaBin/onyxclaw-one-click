@@ -31,6 +31,9 @@ Template、CCE 到 AgentSphere 的网络、
   出网连通性验证；
 - CCE 自动创建 Channel 私网 ELB 所需的网络条件；不预创建 ELB、`18890/TCP` 监听器或后端，全部交由
   CCE LoadBalancer Service 托管；
+- APP 浏览器入口的明确选择：默认 `nodeport` 需要节点 EIP；只有用户明确在 `config/config.env` 设置
+  `APP_ACCESS_MODE=public-elb` 时，才由 CCE LoadBalancer Service 创建公网 APP ELB 并申请、绑定 EIP。
+  这是新增公网暴露，Agent 不得自行启用；
 - 与 CCE/AgentSphere 同 VPC 的 SFS Turbo ID，以及 UID/GID 1000 写权限验证结果。
 
 真实 Secret 只能进入本地 `config/secrets.env` 和 Kubernetes Secret。不得打印、回显、提交、写入
@@ -107,7 +110,7 @@ server-side dry-run 当成真实部署成功证据。
 node scripts/deploy.mjs --config config/config.env --secrets config/secrets.env
 ```
 
-脚本按以下顺序执行：Namespace → APP Service → Channel Service → 等待 Channel ELB →
+脚本按以下顺序执行：Namespace → APP Service → Channel Service →（若选择公网 APP ELB，等待其 EIP）→ 等待 Channel ELB →
 Provider ConfigMap → Secret → Deployment → rollout → Pod 内 `/api/ui-config` 验证。
 
 不得手工创建另一套 Manifest。脚本失败后先读取事件、Pod 状态和脱敏日志；不得通过放宽安全组、
@@ -119,7 +122,8 @@ Provider ConfigMap → Secret → Deployment → rollout → Pod 内 `/api/ui-co
 
 - Deployment 为期望副本数且全部 Ready；
 - APP Pod `imageID` 是已验证的不可变 digest；
-- APP 与 Channel Service 的类型、端口和 Channel ELB 地址符合输入；
+- APP 与 Channel Service 的类型、端口、APP 浏览器入口和 Channel ELB 地址符合输入；在 `public-elb` 模式下，
+  APP ELB 必须有公网 EIP，且浏览器通过 `http://<elb-eip>` 打开页面；
 - `/api/ui-config` 返回 `deploymentMode=cloud`、
   `providerId=huaweicloud-agentsphere`、正确 Region/Template/Model；
 - ConfigMap 中没有 Key/Token，Secret 只检查四个预期键名；
@@ -135,8 +139,8 @@ Provider ConfigMap → Secret → Deployment → rollout → Pod 内 `/api/ui-co
 ## 故障与停止条件
 
 - `ImagePullBackOff`：核对 APP 镜像 digest、镜像仓库权限和 `IMAGE_PULL_SECRET`，不改成浮动标签。
-- ELB 长时间无地址：核对 `kubernetes.io/elb.id` 或 `kubernetes.io/elb.autocreate`、子网和
-  CCE 事件；不得把私网 Channel 擅自改为公网。
+- ELB 长时间无地址：核对 `kubernetes.io/elb.id` 或 `kubernetes.io/elb.autocreate`、子网、EIP 配额和
+  CCE 事件；不得把私网 Channel 擅自改为公网。APP 公网 ELB 仅能在用户已明确选择 `public-elb` 时排障。
 - APP 启动时报 Provider/Secret 缺失：比较 ConfigMap 字段与 Secret 键名，不读取值。
 - Sandbox API 失败：保留阶段、status code、request ID 和脱敏日志，区分控制面/数据面。
 - Channel 失败：从 Sandbox 视角验证私网 ELB、路由、DNS、端口和 WebSocket Upgrade。

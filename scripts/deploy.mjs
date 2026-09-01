@@ -23,6 +23,18 @@ const CHANNEL_ELB_ANNOTATIONS = {
   "kubernetes.io/elb.class": "union",
   "kubernetes.io/elb.autocreate": "{\"type\":\"inner\",\"name\":\"onyxclaw-channel\"}",
 };
+const APP_PUBLIC_ELB_ANNOTATIONS = {
+  "kubernetes.io/elb.class": "union",
+  "kubernetes.io/elb.autocreate": JSON.stringify({
+    type: "public",
+    name: "onyxclaw-app",
+    bandwidth_name: "onyxclaw-app-bandwidth",
+    bandwidth_chargemode: "traffic",
+    bandwidth_size: 5,
+    bandwidth_sharetype: "PER",
+    eip_type: "5_bgp",
+  }),
+};
 
 function resourceLabels(extra = {}) {
   return {
@@ -92,6 +104,11 @@ function validateBaseConfig(baseConfig, config) {
 }
 
 function normalizedConfig(raw) {
+  const appAccessMode = raw.APP_ACCESS_MODE?.trim() || "nodeport";
+  if (!['nodeport', 'public-elb'].includes(appAccessMode)) {
+    throw new Error("APP_ACCESS_MODE must be nodeport or public-elb");
+  }
+  const appUsesPublicElb = appAccessMode === "public-elb";
   const config = {
     KUBE_CONTEXT: raw.KUBE_CONTEXT?.trim() || "",
     KUBECONFIG: required(raw, "KUBECONFIG"),
@@ -107,14 +124,15 @@ function normalizedConfig(raw) {
     ),
     AGENTSPHERE_TEMPLATE_ID: required(raw, "AGENTSPHERE_TEMPLATE_ID"),
     AGENTSPHERE_TEMPLATE_IMAGE,
-    APP_SERVICE_TYPE: "NodePort",
-    APP_SERVICE_ANNOTATIONS: {},
-    APP_NODE_PORT: 30080,
-    APP_PUBLIC_URL: "",
+    APP_ACCESS_MODE: appAccessMode,
+    APP_SERVICE_TYPE: appUsesPublicElb ? "LoadBalancer" : "NodePort",
+    APP_SERVICE_ANNOTATIONS: appUsesPublicElb ? APP_PUBLIC_ELB_ANNOTATIONS : {},
+    APP_NODE_PORT: appUsesPublicElb ? null : 30080,
+    APP_PUBLIC_URL: appUsesPublicElb ? "auto" : "",
     CHANNEL_SERVICE_TYPE: "LoadBalancer",
     CHANNEL_SERVICE_NAME: DEFAULT_CHANNEL_SERVICE_NAME,
     CHANNEL_SERVICE_ANNOTATIONS: CHANNEL_ELB_ANNOTATIONS,
-    APP_SERVICE_PORT: 3000,
+    APP_SERVICE_PORT: appUsesPublicElb ? 80 : 3000,
     CHANNEL_SERVICE_PORT: 18890,
     CHANNEL_PUBLIC_URL: "auto",
     MODEL_PROVIDER: "deepseek",
@@ -496,12 +514,12 @@ function validateRuntimeDns(config) {
   if (output) console.log(output);
 }
 
-async function waitForLoadBalancer(config, timeoutSeconds = 600) {
+async function waitForLoadBalancer(config, serviceName, timeoutSeconds = 600) {
   const deadline = Date.now() + timeoutSeconds * 1000;
   while (Date.now() < deadline) {
     const raw = runKubectl(
       config,
-      ["-n", config.NAMESPACE, "get", "service", config.CHANNEL_SERVICE_NAME, "-o", "json"],
+      ["-n", config.NAMESPACE, "get", "service", serviceName, "-o", "json"],
       { capture: true },
     );
     const ingress = JSON.parse(raw)?.status?.loadBalancer?.ingress?.[0];
@@ -511,7 +529,7 @@ async function waitForLoadBalancer(config, timeoutSeconds = 600) {
   }
   throw new Error(
     `CCE LoadBalancer did not receive an address within ${timeoutSeconds}s; ` +
-      `inspect service/${config.CHANNEL_SERVICE_NAME}`,
+      `inspect service/${serviceName}`,
   );
 }
 
@@ -557,6 +575,23 @@ function assertNoForeignResourceCollisions(config) {
         `refusing to overwrite existing ${kind}/${name}; expected ` +
           `app.kubernetes.io/managed-by=${MANAGED_BY}`,
       );
+    }
+    if (kind === "service" && name === APP_NAME) {
+      const actualType = resource?.spec?.type;
+      if (actualType !== config.APP_SERVICE_TYPE) {
+        throw new Error(
+          `existing service/${APP_NAME} uses ${actualType}; APP_ACCESS_MODE=${config.APP_ACCESS_MODE} ` +
+            `requires ${config.APP_SERVICE_TYPE}. Changing the APP exposure mode requires an explicit Service migration.`,
+        );
+      }
+      const actualAutocreate = resource?.metadata?.annotations?.["kubernetes.io/elb.autocreate"];
+      const expectedAutocreate = config.APP_SERVICE_ANNOTATIONS["kubernetes.io/elb.autocreate"];
+      if ((actualAutocreate || expectedAutocreate) && actualAutocreate !== expectedAutocreate) {
+        throw new Error(
+          `existing service/${APP_NAME} has a different ELB binding; ` +
+            "do not modify CCE ELB annotations in place. Use an explicitly authorized Service migration.",
+        );
+      }
     }
   }
 }
@@ -719,6 +754,7 @@ async function main(argv = process.argv.slice(2)) {
             `${resources.secret.kind}/${resources.secret.metadata.name} (content redacted)`,
             `${resources.deployment.kind}/${resources.deployment.metadata.name}`,
           ],
+          appPublicUrl: config.APP_PUBLIC_URL === "auto" ? "http://<cce-public-elb-eip>" : null,
           channelPublicUrl: channel,
         },
         null,
@@ -767,10 +803,17 @@ async function main(argv = process.argv.slice(2)) {
   applyResource(config, initialResources.appService);
   applyResource(config, initialResources.channelService);
 
+  let appPublicUrl = config.APP_PUBLIC_URL;
+  if (appPublicUrl === "auto") {
+    console.log("Waiting for the CCE public APP LoadBalancer EIP...");
+    const address = await waitForLoadBalancer(config, APP_NAME);
+    appPublicUrl = `http://${address}`;
+  }
+
   let channelPublicUrl = config.CHANNEL_PUBLIC_URL;
   if (channelPublicUrl === "auto") {
     console.log("Waiting for the CCE LoadBalancer address...");
-    const address = await waitForLoadBalancer(config);
+    const address = await waitForLoadBalancer(config, config.CHANNEL_SERVICE_NAME);
     channelPublicUrl = `ws://${address}:${config.CHANNEL_SERVICE_PORT}/connect`;
   }
 
@@ -805,7 +848,7 @@ async function main(argv = process.argv.slice(2)) {
   validateUiConfig(actual, config);
   console.log(`Deployment verified: provider=${actual.providerId}`);
   console.log(`Channel URL: ${channelPublicUrl}`);
-  if (config.APP_PUBLIC_URL) console.log(`APP URL: ${config.APP_PUBLIC_URL}`);
+  if (appPublicUrl) console.log(`APP URL: ${appPublicUrl}`);
   else console.log(`APP Service: ${config.APP_SERVICE_TYPE} port ${config.APP_SERVICE_PORT}`);
 }
 

@@ -10,14 +10,27 @@ pause/resume → reset/kill 清理。
 
 ![OnyxClaw CCE + AgentSphere 部署架构与网络拓扑](./assets/onyxclaw-cce-agentsphere-architecture.visual-check.1440x900.light.png)
 
-拓扑的关键约束如下：
+拓扑的关键约束说明如下：
 
 - CCE、智能体网关、Template/Sandbox 与 SFS Turbo 必须在同一 VPC；网关必须开启私网访问。
 - APP 对 AgentSphere 的调用分为两条并行链路：**控制面**只处理 Sandbox 的创建、暂停、恢复与删除；
   **私网数据面**处理 `exec`、文件读写等运行时请求。
-- APP 页面使用 NodePort `30080`；Channel 由 CCE 自动创建私网 ELB，监听 `18890/TCP`，Sandbox 通过 WebSocket 回连。
+- APP 页面默认使用节点 EIP 上的 NodePort `30080`；无法绑定节点 EIP 时，可在首次部署前设置
+  `APP_ACCESS_MODE=public-elb`，由 CCE 自动创建公网 ELB 并申请、绑定 APP 专用 EIP。Channel 始终由 CCE
+  自动创建私网 ELB，监听 `18890/TCP`，Sandbox 通过 WebSocket 回连。
 - Sandbox 访问 DeepSeek 等公网模型只能走其所在子网的 NAT Gateway + SNAT；节点公网 EIP 不能代替 SNAT EIP。
-- SFS Turbo 挂载固定 workspace，保存 `SOUL.md` 等状态；AgentSphere 提供 pause/resume 能力。
+- SFS Turbo 挂载固定 workspace，保存 `SOUL.md` 等状态。
+
+APP 浏览器入口与节点 EIP 的对应关系说明：
+
+| 浏览器访问方式 | `config/config.env` | `iac/cce/terraform.tfvars` | 浏览器地址 |
+| --- | --- | --- | --- |
+| 默认：节点 EIP + NodePort | 不填写 `APP_ACCESS_MODE`（默认 `nodeport`） | `enable_worker_node_eip = true` | `http://<node-eip>:30080` |
+| 可选：APP 公网 ELB + EIP | `APP_ACCESS_MODE=public-elb` | 通常 `enable_worker_node_eip = false` | 部署输出的 `http://<elb-eip>` |
+
+公网 ELB 模式下，EIP 绑定到 APP 的 ELB，而不是工作节点。只有还要直接 SSH 到节点排障时，才在公网 ELB
+模式下保留 `enable_worker_node_eip = true`；这会额外占用一条 EIP 配额。无论选择哪种浏览器入口，API Server
+EIP 与 Sandbox 的 SNAT EIP 都仍是独立且必需的资源。
 
 ## 选择部署路径
 
@@ -25,13 +38,14 @@ pause/resume → reset/kill 清理。
 
 | 你的条件 | 推荐路径 | AI Agent 负责 | 人工必须完成 |
 | --- | --- | --- | --- |
-| 有华为云 AK/SK，且可使用 AI Agent | **最快自动化路径** | 按 Terraform 创建独立 VPC/子网、CCE、节点/EIP、NAT/SNAT 与 SFS；预检、准备 SFS、部署 APP、收集验收证据。 | 在本地安全提供 AK/SK、节点登录方式并审阅 Terraform plan；从 CCE 下载 kubeconfig；在 AgentSphere 控制台创建私网网关和 Template；填写 4 项环境信息与 2 个 API Key。 |
+| 有华为云 AK/SK，且可使用 AI Agent | **最快自动化路径** | 按 Terraform 创建独立 VPC/子网、CCE、节点/EIP、NAT/SNAT 与 SFS；预检、准备 SFS、部署 APP、收集验收证据。 | 在本地安全提供 AK/SK、节点登录方式并审阅 Terraform plan；从 CCE 下载 kubeconfig；在 AgentSphere 控制台创建私网网关和 Template；填写 4 项环境信息与 2 个 API Key。若节点不能绑定 EIP，选择 APP 的公网 ELB 入口。 |
 | 没有 AK/SK，但可使用 AI Agent | **半自动路径** | 根据本包手册检查人工创建的资源，执行 kubeconfig/RBAC 预检、SFS 准备、APP 部署、运行时 DNS 检查与验收辅助。 | 在华为云控制台创建 VPC、CCE、NAT/SNAT、SFS；下载 kubeconfig；创建私网网关和 Template；填写本地配置与密钥。 |
 | 没有 AK/SK，也没有 AI Agent | **人工路径** | 不适用。 | 按控制台手册创建云资源，按部署手册执行脚本、打开 APP，并完成全部验收。 |
 
 AI Agent 可以是 Codex 或其他能读取仓库文件、运行 Terraform / Node.js / kubectl 的 Agent。所有 Agent 都应先阅读
-[AGENTS.md](./AGENTS.md) 和 [Agent 部署 Runbook](./docs/AGENT_DEPLOYMENT.md)。AK/SK、kubeconfig、节点密码和
-API Key 只能保存在本地受保护文件或凭据环境中，不能提交、粘贴进聊天或写入 Terraform plan。
+[AGENTS.md](./AGENTS.md) 和 [Agent 部署 Runbook](./docs/AGENT_DEPLOYMENT.md)。支持 Skill 的 Agent 可使用本包的
+[OnyxClaw CCE 部署编排 Skill](./skills/onyxclaw-cce-deploy/SKILL.md)，以现有配置和脚本推进完整闭环。AK/SK、
+kubeconfig、节点密码和 API Key 只能保存在本地受保护文件或凭据环境中，不能提交、粘贴进聊天或写入 Terraform plan。
 
 ## 从零到端到端验收的闭环
 
@@ -40,7 +54,7 @@ API Key 只能保存在本地受保护文件或凭据环境中，不能提交、
 | 阶段 | 完成动作 | 继续条件 / 输出 |
 | --- | --- | --- |
 | 1. 选择路径与权限 | 选择上表路径；确认账号已开通 CCE、SFS Turbo、AgentSphere，且 Region 为 `cn-south-1`。 | 快速路径还需本地可用 AK/SK；其余路径按控制台权限执行。 |
-| 2. 创建基础设施 | 通过 Terraform 或控制台创建同一 VPC/子网中的 CCE、工作节点、NAT/SNAT 和 SFS Turbo。 | 节点为 Ready；Sandbox 子网可经 SNAT HTTPS 出网；取得 SFS ID 与 NFS 根路径。 |
+| 2. 创建基础设施 | 通过 Terraform 或控制台创建同一 VPC/子网中的 CCE、工作节点、NAT/SNAT 和 SFS Turbo；选择 APP 的浏览器入口。 | 节点为 Ready；Sandbox 子网可经 SNAT HTTPS 出网；取得 SFS ID 与 NFS 根路径。NodePort 需要节点 EIP；公网 ELB 由部署脚本后续创建并绑定 EIP。 |
 | 3. 完成人工控制台边界 | 从 CCE 下载 kubeconfig；在 AgentSphere 创建开启私网访问的网关；在同 VPC 创建 Template。 | 得到 kubeconfig、网关私网数据面 URL、Template ID。Template 的“选择镜像”直接填写固定公开 OpenClaw tag。 |
 | 4. 填写本地输入 | 运行 `./scripts/init.sh`。 | `config/config.env` 填 4 项；`config/secrets.env` 填 2 个 API Key。 |
 | 5. 准备与部署 | 初始化 SFS workspace；执行离线检查、集群预检、server dry-run 和正式部署。 | `SFS_PREPARE_OK`；APP Pod Ready；控制面和网关私网数据面 DNS 均可解析。 |
@@ -100,6 +114,7 @@ node scripts/deploy.mjs --config config/config.env --secrets config/secrets.env 
 | Terraform 创建 VPC、CCE、NAT/SNAT、SFS | [Terraform 基础设施与 CCE](./iac/cce/README.md) |
 | 人工部署命令、页面使用与完整验收 | [人工部署与使用](./docs/HUMAN_DEPLOYMENT.md) |
 | 供任意 AI Agent 执行的安全边界、证据和停止条件 | [Agent 部署 Runbook](./docs/AGENT_DEPLOYMENT.md) |
+| 支持 Skill 的 Agent 的部署编排入口 | [OnyxClaw CCE 部署编排 Skill](./skills/onyxclaw-cce-deploy/SKILL.md) |
 | 当前稳定镜像和关键运行时约束 | [稳定基线](./docs/references/CURRENT_DEMO_BASELINE.md) |
 | 空账号实际验证的经验与故障案例 | [空账号自测记录](./docs/references/NEW_ACCOUNT_VALIDATION.md) |
 
