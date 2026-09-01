@@ -17,9 +17,10 @@
 - `config/`：示例及本地生成配置。真实 kubeconfig、API Key、`config.env`、`secrets.env`、
   `openclaw-base-config.json` 均不得提交、打印或回显。
 - `scripts/`：唯一执行入口。Kubernetes 写操作只能经 `scripts/deploy.mjs`；不得另建 YAML 或平行部署器。
-- `iac/cce/`：可选 Terraform 路径。它从零创建 VPC/子网，并可管理 CCE、EIP、NAT/SNAT 与 SFS Turbo；不管理
-  Kubernetes APP、AgentSphere，也不生成或输出 kubeconfig。执行 `apply` 或 `destroy` 前，必须
-  向用户展示并取得其对具体 plan 的授权。
+- `iac/cce/`：可选 Terraform 路径。默认从零创建 VPC/子网；设置 `network_mode = "existing"` 后可只使用已有
+  VPC/子网 ID，并创建 CCE、EIP、可选 NAT/SNAT 与 SFS Turbo。已有网络只作为输入，不纳入 state；它不管理
+  Kubernetes APP、AgentSphere，也不生成或输出 kubeconfig。执行 `apply` 或 `destroy` 前，必须向用户展示并取得其对
+  具体 plan 的授权。
 - `docs/references/`：稳定基线和空账号实测记录，仅用于比较，不可复用其中的资源 ID、网络地址或账号配置。
 
 APP Ready 只代表 CCE 部署成功，不代表端到端完成。只有 Sandbox 创建、SOUL 写入、Channel 回连、模型对话、

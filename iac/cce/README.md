@@ -1,8 +1,9 @@
 # Terraform：基础设施与 CCE
 
-此模块提供一条从零开始、与控制台手工流程等价的 IaC 路径。它始终创建独立 VPC 与子网，并可创建：
+此模块提供一条与控制台手工流程等价的 IaC 路径。默认从零创建独立 VPC 与子网；若已有用于 AgentSphere 或 SFS 的
+VPC/子网，也可设置 `network_mode = "existing"`，在该网络中创建 CCE。它可创建：
 
-- VPC 与子网；
+- VPC 与子网（仅 `network_mode = "create"`）；
 - CCE Standard 集群、API Server 专用 EIP、一个 containerd 节点及可选节点 EIP；
 - 公网 NAT Gateway、专用 SNAT EIP 与目标子网的 SNAT 规则（`manage_snat = true`）；
 - 带专用安全组的 NFS SFS Turbo（`manage_sfs = true`）；
@@ -13,7 +14,8 @@
 
 ## 运行前准备
 
-1. 选择目标 AZ，规划新 VPC/子网、Pod 与 Service 网段且保证互不重叠。
+1. 选择目标 AZ，并选择网络模式：新环境使用 `create`，已有 VPC/子网使用 `existing`。无论哪种模式，Pod、Service
+   与 VPC 网段均不得重叠。
 2. 安装 Terraform `1.6+`。将 `secrets.auto.tfvars.example` 复制为 `secrets.auto.tfvars`，填写 AK、SK 和（如使用
    密码登录）节点密码，并设置文件权限为 `600`。真实文件被 Git 忽略，绝不提交。
 3. 确认目标 Region/AZ 实际提供的 CCE 版本、集群规格、节点 ECS 规格、节点操作系统值与磁盘类型。
@@ -45,10 +47,32 @@ terraform output
 
 不再需要每次 `export`。保留环境变量认证作为 provider 的兼容回退方式，但不推荐作为本模块的日常使用方式。
 
-若本地 `terraform.tfvars` 来自本模块的早期版本，删除其中的
-`vpc_id`、`subnet_id`、`write_app_config`、`app_config_path`、`app_kubeconfig_path`、`app_namespace`、
-`agentsphere_sandbox_url` 与 `agentsphere_template_id`。当前模块始终新建 VPC/子网，且不再管理 APP 配置；
-这些旧字段不会参与资源创建，并会在 Terraform 校验时产生迁移提醒。
+### 复用已有 VPC/子网
+
+已有 VPC、子网、SFS Turbo、AgentSphere 私网网关或 Template，但尚未创建 CCE 时，使用下列最小网络配置：
+
+```hcl
+network_mode       = "existing"
+existing_vpc_id    = "<已有 VPC ID>"
+existing_subnet_id = "<已有子网 ID>"
+
+# 已有 SFS 时保持 false；其文件系统 ID 稍后填写到 config/config.env。
+manage_sfs = false
+
+# 已有 NAT/SNAT 时保持 false；尚未配置 Sandbox 出网时设为 true。
+manage_snat = true
+```
+
+该模式不会读取、import 或管理已有 VPC/子网；它们不会出现在 Terraform state 中，`terraform destroy` 也不会删除它们。
+当 `manage_sfs = false` 时，已有 SFS 同样不由本模块管理。`manage_snat = true` 会在指定的已有 VPC/子网中新建
+NAT Gateway、SNAT EIP 与规则；若这些出网资源已存在，则保持 `false`，避免重复创建。
+
+`network_mode = "create"`（默认）不应填写 `existing_vpc_id` 或 `existing_subnet_id`；模块会在 plan 前报出明确错误，
+防止误把两种模式混用。
+
+若本地 `terraform.tfvars` 来自本模块的早期版本，删除其中的 `vpc_id`、`subnet_id`、`write_app_config`、
+`app_config_path`、`app_kubeconfig_path`、`app_namespace`、`agentsphere_sandbox_url` 与 `agentsphere_template_id`。
+请改用 `existing_vpc_id`、`existing_subnet_id`；本模块不管理 APP 配置。
 
 apply 后保存 outputs 作为部署记录。等待节点为 Active 后，从 CCE 控制台下载 API Server 公网 kubeconfig，
 设置权限为 `600`，再用 `kubectl get nodes` 验证节点状态。
@@ -99,7 +123,8 @@ SFS Turbo ID/NFS 根路径，以及 AgentSphere 网关 URL 和 Template ID。
 
 ## 生命周期与清理
 
-`terraform destroy` 不应作为日常测试命令。当 IaC 模式创建网络、NAT 或 SFS 时，它也会尝试
-删除同一 state 中这些资源。先在 APP 内 reset 本次 Sandbox，并删除本次测试 namespace 中的 APP 对象；再检查
+`terraform destroy` 不应作为日常测试命令。当 IaC 模式创建网络、NAT 或 SFS 时，它也会尝试删除同一 state 中由它创建的
+资源。`network_mode = "existing"` 的 VPC/子网和 `manage_sfs = false` 的已有 SFS 不在 state 中，不属于 destroy 范围。
+先在 APP 内 reset 本次 Sandbox，并删除本次测试 namespace 中的 APP 对象；再检查
 `terraform plan -destroy -out=destroy.plan`，只销毁用户明确授权且独立的 Demo/Test 资源，最后执行
 `terraform apply destroy.plan`。AgentSphere 网关与 Template 不由 Terraform 管理，需在控制台单独删除。

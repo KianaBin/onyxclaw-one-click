@@ -1,8 +1,13 @@
-# This IaC path always creates a dedicated VPC and subnet. The console manual path remains documented separately.
+# 网络有两种模式：默认 create 新建 VPC/子网；已有同一 VPC 的 AgentSphere/SFS 时改为 existing，
+# 并填写已有资源 ID。existing 模式不会把已有 VPC/子网写入 Terraform state 或在 destroy 时删除。
+network_mode = "create"
+# existing_vpc_id    = "<existing-vpc-id>"
+# existing_subnet_id = "<existing-subnet-id>"
+
 region            = "cn-south-1"
 availability_zone = "cn-south-1a"
 
-# These values must not overlap CCE Pod or Service CIDRs.
+# 仅 network_mode = create 时使用；网段不得与 CCE Pod 或 Service 网段重叠。
 vpc_name          = "onyxclaw-demo-vpc"
 vpc_cidr          = "192.168.0.0/16"
 subnet_name       = "onyxclaw-demo-subnet"

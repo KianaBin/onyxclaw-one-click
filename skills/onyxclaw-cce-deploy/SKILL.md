@@ -24,12 +24,29 @@ description: "编排 OnyxClaw 在华为云 CCE 与 AgentSphere 的从前置检�
 将本次任务归类为一个路径，并说明缺少什么才能继续：
 
 - **已有 CCE**：使用已有 kubeconfig、SFS、私网网关和 Template，跳过 Terraform。
-- **空账号且有 AK/SK**：用 `iac/cce/` 生成独立资源的 Terraform plan；只在用户查看具体 plan 并明确授权后才可 apply。
+- **空账号且有 AK/SK**：用 `iac/cce/` 生成新建网络资源的 Terraform plan；只在用户查看具体 plan 并明确授权后才可 apply。
 - **空账号但无 AK/SK**：按 `docs/CLOUD_PREREQUISITES.md` 指导用户在控制台完成资源准备，再回到既有 APP 部署流程。
 
+遇到**已有 VPC 或部分 AgentSphere 资源，但没有 CCE**的混合场景时，先逐项记录已有的 VPC/子网、SFS、网关、
+Template、NAT/SNAT 和 CCE 状态。有 AK/SK 时，优先使用 `iac/cce/` 的复用网络模式：
+
+```hcl
+network_mode       = "existing"
+existing_vpc_id    = "<已有 VPC ID>"
+existing_subnet_id = "<已有子网 ID>"
+```
+
+该模式只引用已有 VPC/子网，不 import、不管理，也不会在 destroy 时删除它们。已有 SFS 时设 `manage_sfs = false`；
+Sandbox 子网尚无 NAT/SNAT 时才设 `manage_snat = true`。随后按同一 Terraform plan 创建 CCE、API Server EIP 和节点，
+并在 apply 后由用户下载 kubeconfig。无 AK/SK 时才改用控制台完成这些步骤。两条路径均复用同一 VPC 中已有的 SFS、
+开启私网访问的网关和已创建 Template；用户提供 kubeconfig、网关私网数据面 URL、Template ID、SFS ID 后，继续本
+Skill 的第 2 步。
+
 读取根 README 的“APP 浏览器入口与节点 EIP 的对应关系”，让用户明确选择 NodePort 或 `public-elb`。只有用户
-明确选择 `APP_ACCESS_MODE=public-elb` 时，才可创建公网 APP ELB；这是公网暴露变更。不要把节点 EIP、API Server
-EIP、APP ELB EIP 和 Sandbox SNAT EIP 混为同一资源。
+明确选择 `APP_ACCESS_MODE=public-elb` 时，才可创建公网 APP ELB；这是公网暴露变更。若用户明确把入口选择委托给
+Agent，且只需在部署机演示，默认选择 `kubectl port-forward`，不申请节点 EIP、不启用公网 APP ELB；只有需要让
+部署机外的浏览器直接访问时，才选择 NodePort 或公网 ELB。不要把节点 EIP、API Server EIP、APP ELB EIP 和
+Sandbox SNAT EIP 混为同一资源。
 
 ### 2. 处理人工边界和最小输入
 
@@ -41,6 +58,8 @@ EIP、APP ELB EIP 和 Sandbox SNAT EIP 混为同一资源。
 
 在继续前，确认网关已开启私网访问，网关、Template/Sandbox、CCE 与 SFS 位于同一 VPC，且 Sandbox 子网具有
 通往模型 Endpoint 的 NAT Gateway + SNAT 出网。Template 创建完成后才接受 Template ID；只记录非敏感的完成状态。
+用户可以确认 Key 的本地文件存在，但 Agent 不主动读取、打印或脱敏展示该文件；只有在用户将值安全填写进
+`config/secrets.env` 后，才运行需要密钥的部署检查。
 
 ### 3. 运行可逆检查
 

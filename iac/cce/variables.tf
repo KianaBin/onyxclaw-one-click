@@ -24,32 +24,57 @@ variable "availability_zone" {
   type        = string
 }
 
+variable "network_mode" {
+  description = "Network ownership mode: create makes a VPC/subnet; existing uses existing_vpc_id and existing_subnet_id without managing them."
+  type        = string
+  default     = "create"
+
+  validation {
+    condition     = contains(["create", "existing"], var.network_mode)
+    error_message = "network_mode must be create or existing."
+  }
+}
+
+variable "existing_vpc_id" {
+  description = "Existing VPC ID used only when network_mode is existing. Terraform reads it as an input and never manages that VPC."
+  type        = string
+  default     = null
+  nullable    = true
+}
+
+variable "existing_subnet_id" {
+  description = "Existing subnet ID used only when network_mode is existing. Terraform reads it as an input and never manages that subnet."
+  type        = string
+  default     = null
+  nullable    = true
+}
+
 variable "vpc_name" {
-  description = "Name for the dedicated Terraform-managed VPC."
+  description = "Name for the VPC created when network_mode is create."
   type        = string
   default     = "onyxclaw-demo-vpc"
 }
 
 variable "vpc_cidr" {
-  description = "CIDR for a Terraform-created VPC."
+  description = "CIDR for the VPC created when network_mode is create."
   type        = string
   default     = "192.168.0.0/16"
 }
 
 variable "subnet_name" {
-  description = "Name for a Terraform-created CCE and AgentSphere subnet."
+  description = "Name for the subnet created when network_mode is create."
   type        = string
   default     = "onyxclaw-demo-subnet"
 }
 
 variable "subnet_cidr" {
-  description = "CIDR for a Terraform-created subnet. It must be inside vpc_cidr."
+  description = "CIDR for the subnet created when network_mode is create. It must be inside vpc_cidr."
   type        = string
   default     = "192.168.0.0/24"
 }
 
 variable "subnet_gateway_ip" {
-  description = "Gateway IP for a Terraform-created subnet."
+  description = "Gateway IP for the subnet created when network_mode is create."
   type        = string
   default     = "192.168.0.1"
 }

@@ -38,6 +38,19 @@ resource "huaweicloud_cce_cluster" "this" {
   eip                    = huaweicloud_vpc_eip.api_server.address
   charging_mode          = "postPaid"
   tags                   = local.cce_tags
+
+  lifecycle {
+    precondition {
+      condition = var.network_mode == "create" ? (
+        trimspace(coalesce(var.existing_vpc_id, "")) == "" &&
+        trimspace(coalesce(var.existing_subnet_id, "")) == ""
+        ) : (
+        trimspace(coalesce(var.existing_vpc_id, "")) != "" &&
+        trimspace(coalesce(var.existing_subnet_id, "")) != ""
+      )
+      error_message = "network_mode=create must not set existing network IDs; network_mode=existing requires both existing_vpc_id and existing_subnet_id."
+    }
+  }
 }
 
 resource "huaweicloud_cce_node" "this" {

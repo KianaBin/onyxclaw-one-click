@@ -16,7 +16,7 @@ AgentSphere 资源的环境；完成后转到 [人工部署与使用](./HUMAN_DE
 
 | 阶段 | 需要记录的输出 | 是否由脚本完成 |
 | --- | --- | --- |
-| VPC/子网 | VPC、子网 ID 与 CIDR | 控制台手工，或从零 Terraform 创建 |
+| VPC/子网 | VPC、子网 ID 与 CIDR | 控制台手工，或 Terraform 新建 / 复用已有网络 |
 | CCE | kubeconfig 绝对路径、current context、节点状态 | Terraform 可创建集群/节点/EIP；kubeconfig 下载和 `config/` 填写仍人工 |
 | NAT/SNAT | Sandbox 所在子网具备公网 HTTPS 出网 | Terraform |
 | SFS Turbo | 文件系统 ID、NFS 共享根路径 | Terraform ；目录准备由脚本完成 |
@@ -32,14 +32,14 @@ AgentSphere 资源的环境；完成后转到 [人工部署与使用](./HUMAN_DE
 | 路径 | 负责范围 | 后续仍需人工完成 |
 | --- | --- | --- |
 | 控制台手工 | 按本手册第 1–4 节创建 VPC、CCE、NAT/SNAT、SFS | kubeconfig 下载、AgentSphere 网关/Template、填写 `config/` |
-| Terraform IaC | 从零创建独立 VPC/子网、CCE/节点/EIP、NAT/SNAT、SFS | kubeconfig 下载、AgentSphere 网关/Template、填写 `config/` |
+| Terraform IaC | 默认新建 VPC/子网；也可复用已有 VPC/子网并创建 CCE/节点/EIP、可选 NAT/SNAT、SFS | kubeconfig 下载、AgentSphere 网关/Template、填写 `config/` |
 
 Terraform **不**创建 Kubernetes APP、AgentSphere 网关或 Template，也不会读取、生成或覆盖
 `config/config.env`、`config/secrets.env`。
 
-## Terraform IaC：从零创建基础设施（可选）
+## Terraform IaC：新建或复用网络（可选）
 
-在新的 Demo/Test 环境中，可先执行：
+在新的 Demo/Test 环境或已有 VPC/子网的环境中，可先执行：
 
 ```bash
 cd iac/cce
@@ -57,7 +57,19 @@ terraform apply cce.plan
 terraform output
 ```
 
-`terraform.tfvars` 中至少按目标 Region/AZ 核对 CCE 版本、节点规格、节点登录方式、镜像/磁盘类型和 CIDR。
+新环境保持 `network_mode = "create"`；已有 VPC/子网（包括已在该网络创建 SFS、AgentSphere 网关或 Template）时，改为：
+
+```hcl
+network_mode       = "existing"
+existing_vpc_id    = "<已有 VPC ID>"
+existing_subnet_id = "<已有子网 ID>"
+manage_sfs         = false # 已有 SFS 不纳入 Terraform 管理
+manage_snat        = true  # 仅在 Sandbox 子网尚无 NAT/SNAT 时开启
+```
+
+复用模式的 VPC/子网只作为 Terraform 输入，不会写入 state，`terraform destroy` 不会删除它们。已有 NAT/SNAT 时将
+`manage_snat` 保持为 `false`；已有 SFS 时将 `manage_sfs` 保持为 `false`。`terraform.tfvars` 中还应按目标 Region/AZ
+核对 CCE 版本、节点规格、节点登录方式、镜像/磁盘类型和 CIDR。
 浏览器入口有两种首次部署模式：默认保持 `enable_worker_node_eip = true`，通过节点公网 EIP 的 NodePort `30080`
 访问；如果节点不能绑定 EIP，则将其设为 `false`，并在后续 `config/config.env` 设置
 `APP_ACCESS_MODE=public-elb`。后者由 CCE 创建公网 APP ELB 并为它申请、绑定 EIP。两种模式都需要预留
@@ -105,7 +117,7 @@ VPC CIDR 不得与 CCE 容器网段、Service 网段或部署机所在网络冲�
 
 ## 2. 创建 CCE 集群、节点并导出 kubeconfig
 
-本节是**控制台手工路径**。若已选择上文的 Terraform IaC 路径，请跳至第 5 节；两个路径最终都需要下述
+本节是**控制台手工路径**。若已选择上文的 Terraform IaC 路径（无论新建还是复用 VPC/子网），请跳至第 5 节；两个路径最终都需要下述
 kubeconfig 下载和验证步骤。
 
 1. 在同一 Region/VPC 创建 CCE 集群，容器网段、Service 网段均不得与 VPC 网段重叠；
@@ -137,8 +149,8 @@ kubectl --kubeconfig /absolute/path/to/cce-kubeconfig.yaml get nodes -o wide
 ## 3. 配置 Sandbox 的公网模型出网
 
 创建公网 NAT Gateway，并在 **AgentSphere Sandbox 实际使用的子网** 上添加 SNAT 规则，绑定独立 EIP。完整
-Terraform 示例 `terraform.tfvars.example` 已设置 `manage_snat = true`，会按新建子网创建三项资源；除非明确
-不需要 Sandbox 访问公网模型，否则保持该值不变。
+Terraform 示例 `terraform.tfvars.example` 已设置 `manage_snat = true`，会在新建或复用的目标子网创建三项资源；除非明确
+已存在可用 SNAT 或不需要 Sandbox 访问公网模型，否则保持该值不变。
 这条规则用于 Sandbox 中的 OpenClaw 请求 `https://api.deepseek.com` 等公网模型 Endpoint；至少应允许
 DNS 与 HTTPS `443/TCP` 出网。
 

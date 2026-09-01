@@ -38,7 +38,7 @@ EIP 与 Sandbox 的 SNAT EIP 都仍是独立且必需的资源。
 
 | 你的条件 | 推荐路径 | AI Agent 负责 | 人工必须完成 |
 | --- | --- | --- | --- |
-| 有华为云 AK/SK，且可使用 AI Agent | **最快自动化路径** | 按 Terraform 创建独立 VPC/子网、CCE、节点/EIP、NAT/SNAT 与 SFS；预检、准备 SFS、部署 APP、收集验收证据。 | 在本地安全提供 AK/SK、节点登录方式并审阅 Terraform plan；从 CCE 下载 kubeconfig；在 AgentSphere 控制台创建私网网关和 Template；填写 4 项环境信息与 2 个 API Key。若节点不能绑定 EIP，选择 APP 的公网 ELB 入口。 |
+| 有华为云 AK/SK，且可使用 AI Agent | **最快自动化路径** | 通过 Terraform 新建或复用已有 VPC/子网，创建 CCE、节点/EIP、可选 NAT/SNAT 与 SFS；预检、准备 SFS、部署 APP、收集验收证据。 | 在本地安全提供 AK/SK、节点登录方式并审阅 Terraform plan；从 CCE 下载 kubeconfig；在 AgentSphere 控制台创建私网网关和 Template；填写 4 项环境信息与 2 个 API Key。若节点不能绑定 EIP，选择 APP 的公网 ELB 入口。 |
 | 没有 AK/SK，但可使用 AI Agent | **半自动路径** | 根据本包手册检查人工创建的资源，执行 kubeconfig/RBAC 预检、SFS 准备、APP 部署、运行时 DNS 检查与验收辅助。 | 在华为云控制台创建 VPC、CCE、NAT/SNAT、SFS；下载 kubeconfig；创建私网网关和 Template；填写本地配置与密钥。 |
 | 没有 AK/SK，也没有 AI Agent | **人工路径** | 不适用。 | 按控制台手册创建云资源，按部署手册执行脚本、打开 APP，并完成全部验收。 |
 
@@ -54,7 +54,7 @@ kubeconfig、节点密码和 API Key 只能保存在本地受保护文件或凭�
 | 阶段 | 完成动作 | 继续条件 / 输出 |
 | --- | --- | --- |
 | 1. 选择路径与权限 | 选择上表路径；确认账号已开通 CCE、SFS Turbo、AgentSphere，且 Region 为 `cn-south-1`。 | 快速路径还需本地可用 AK/SK；其余路径按控制台权限执行。 |
-| 2. 创建基础设施 | 通过 Terraform 或控制台创建同一 VPC/子网中的 CCE、工作节点、NAT/SNAT 和 SFS Turbo；选择 APP 的浏览器入口。 | 节点为 Ready；Sandbox 子网可经 SNAT HTTPS 出网；取得 SFS ID 与 NFS 根路径。NodePort 需要节点 EIP；公网 ELB 由部署脚本后续创建并绑定 EIP。 |
+| 2. 创建基础设施 | 通过 Terraform 或控制台创建同一 VPC/子网中的 CCE、工作节点、NAT/SNAT 和 SFS Turbo；Terraform 可新建网络，也可复用已有网络。选择 APP 的浏览器入口。 | 节点为 Ready；Sandbox 子网可经 SNAT HTTPS 出网；取得 SFS ID 与 NFS 根路径。NodePort 需要节点 EIP；公网 ELB 由部署脚本后续创建并绑定 EIP。 |
 | 3. 完成人工控制台边界 | 从 CCE 下载 kubeconfig；在 AgentSphere 创建开启私网访问的网关；在同 VPC 创建 Template。 | 得到 kubeconfig、网关私网数据面 URL、Template ID。Template 的“选择镜像”直接填写固定公开 OpenClaw tag。 |
 | 4. 填写本地输入 | 运行 `./scripts/init.sh`。 | `config/config.env` 填 4 项；`config/secrets.env` 填 2 个 API Key。 |
 | 5. 准备与部署 | 初始化 SFS workspace；执行离线检查、集群预检、server dry-run 和正式部署。 | `SFS_PREPARE_OK`；APP Pod Ready；控制面和网关私网数据面 DNS 均可解析。 |
@@ -111,7 +111,7 @@ node scripts/deploy.mjs --config config/config.env --secrets config/secrets.env 
 | 需要了解的内容 | 入口 |
 | --- | --- |
 | 云资源创建顺序、控制台填写项、官方文档链接 | [云资源前置条件](./docs/CLOUD_PREREQUISITES.md) |
-| Terraform 创建 VPC、CCE、NAT/SNAT、SFS | [Terraform 基础设施与 CCE](./iac/cce/README.md) |
+| Terraform 新建/复用网络并创建 CCE、NAT/SNAT、SFS | [Terraform 基础设施与 CCE](./iac/cce/README.md) |
 | 人工部署命令、页面使用与完整验收 | [人工部署与使用](./docs/HUMAN_DEPLOYMENT.md) |
 | 供任意 AI Agent 执行的安全边界、证据和停止条件 | [Agent 部署 Runbook](./docs/AGENT_DEPLOYMENT.md) |
 | 支持 Skill 的 Agent 的部署编排入口 | [OnyxClaw CCE 部署编排 Skill](./skills/onyxclaw-cce-deploy/SKILL.md) |

@@ -21,11 +21,17 @@ test("CCE resource tags do not use Kubernetes label keys rejected by the CCE API
   assert.match(variables, /!strcontains\(key, "\/"\)/);
 });
 
-test("full IaC mode always creates isolated network resources and optional egress/storage", () => {
+test("IaC selects either new or existing network resources and optionally manages egress/storage", () => {
   assert.match(network, /resource "huaweicloud_vpc" "this"/);
-  assert.doesNotMatch(network, /network_mode|var\.vpc_id|var\.subnet_id/);
+  assert.match(network, /count = var\.network_mode == "create" \? 1 : 0/);
+  assert.match(network, /var\.network_mode == "existing" \? var\.existing_vpc_id/);
+  assert.match(network, /var\.network_mode == "existing" \? var\.existing_subnet_id/);
   assert.match(network, /target_vpc_id/);
   assert.match(network, /target_subnet_id/);
+  assert.match(variables, /variable "network_mode"/);
+  assert.match(variables, /variable "existing_vpc_id"/);
+  assert.match(variables, /variable "existing_subnet_id"/);
+  assert.match(main, /network_mode=existing requires both existing_vpc_id and existing_subnet_id/);
 
   assert.match(variables, /variable "manage_snat"/);
   assert.match(egress, /resource "huaweicloud_nat_gateway" "this"/);
