@@ -2,4 +2,13 @@ config/config.env
 config/secrets.env
 config/openclaw-base-config.json
 *kubeconfig*.yaml
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+iac/cce/secrets.auto.tfvars
+*.tfplan
+iac/cce/*.plan
+crash.log
 .DS_Store

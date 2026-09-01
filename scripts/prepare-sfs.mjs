@@ -26,11 +26,13 @@ export function parseArgs(argv) {
     result[keys[key]] = value;
     index += 1;
   }
-  for (const name of ["kubeconfig", "context", "nfs_endpoint"]) {
+  for (const name of ["kubeconfig", "nfs_endpoint"]) {
     if (!result[name]) throw new Error(`--${name.replaceAll("_", "-")} is required`);
   }
   if (!path.isAbsolute(result.kubeconfig)) throw new Error("--kubeconfig must be an absolute path");
-  if (!/^[A-Za-z0-9._-]+$/.test(result.context)) throw new Error("--context contains unsafe characters");
+  if (result.context && !/^[A-Za-z0-9._-]+$/.test(result.context)) {
+    throw new Error("--context contains unsafe characters");
+  }
   if (!/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(result.namespace)) {
     throw new Error("--namespace must be a Kubernetes namespace name");
   }
@@ -81,7 +83,7 @@ export function buildOverrides({ server, exportPath, sharePath }) {
 function kubectl(config, args, { allowFailure = false } = {}) {
   const result = spawnSync("kubectl", [
     "--kubeconfig", config.kubeconfig,
-    "--context", config.context,
+    ...(config.context ? ["--context", config.context] : []),
     ...args,
   ], { encoding: "utf8" });
   if (result.error) throw result.error;

@@ -3,7 +3,16 @@ import test from "node:test";
 
 import { buildOverrides, parseArgs, parseNfsEndpoint } from "../scripts/prepare-sfs.mjs";
 
-test("SFS CLI requires explicit cluster identity and a root endpoint", () => {
+test("SFS CLI uses kubeconfig current context by default and accepts an explicit override", () => {
+  assert.deepEqual(parseArgs([
+    "--kubeconfig", "/tmp/cce.yaml",
+    "--nfs-endpoint", "192.168.0.2:/",
+  ]), {
+    kubeconfig: "/tmp/cce.yaml",
+    nfs_endpoint: "192.168.0.2:/",
+    namespace: "default",
+    sharePath: "/onyxclaw/workspace",
+  });
   assert.deepEqual(parseArgs([
     "--kubeconfig", "/tmp/cce.yaml",
     "--context", "onyxclaw-demo-test",
