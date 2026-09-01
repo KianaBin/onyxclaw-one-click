@@ -125,4 +125,5 @@ node scripts/deploy.mjs --config config/config.env --secrets config/secrets.env 
 | `scripts/` | 唯一的 SFS 准备和 Kubernetes 部署入口。 |
 | `docs/` | 面向人工部署者和 AI Agent 的分路径手册。 |
 | `docs/references/` | 已验证基线与空账号实测记录，只用于对照。 |
+| `tools/agentsphere-openclaw-sandbox/` | 可选的 AgentSphere Sandbox 镜像重建与交互诊断工具；不参与默认一键部署，也不替换当前稳定 Template 镜像。 |
 | `assets/` | 架构图与 AgentSphere 控制台示意图。 |
