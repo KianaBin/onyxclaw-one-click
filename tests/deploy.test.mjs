@@ -17,6 +17,7 @@ const rawConfig = {
   AGENTSPHERE_SANDBOX_URL: "https://sandbox.example.test",
   AGENTSPHERE_TEMPLATE_ID: "template-123",
   SFS_TURBO_ID: "sfs-123",
+  APP_IMAGE: "registry.example.test/onyxclaw-app:v1@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 };
 
 const baseConfig = {
@@ -168,16 +169,16 @@ test("CCE auto-creates the private Channel ELB in the fixed profile", () => {
   );
 });
 
-test("fixed deployment settings cannot be changed through config.env", () => {
+test("image versions are read from config.env while fixed deployment settings remain fixed", () => {
   const config = normalizedConfig({
     ...rawConfig,
-    APP_IMAGE: "swr.example.test/app:mutable",
+    APP_IMAGE: "swr.example.test/app:v2@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
     REGION: "other-region",
     CHANNEL_SERVICE_ANNOTATIONS_JSON: "{}",
     MODEL_ID: "other-model",
   });
   assert.equal(config.REGION, "cn-south-1");
-  assert.match(config.APP_IMAGE, /@sha256:[0-9a-f]{64}$/);
+  assert.equal(config.APP_IMAGE, "swr.example.test/app:v2@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
   assert.equal(config.MODEL_ID, "deepseek-v4-flash");
   assert.equal(config.NAMESPACE, "onyxclaw");
   assert.equal(config.KUBE_CONTEXT, "");
@@ -185,6 +186,10 @@ test("fixed deployment settings cannot be changed through config.env", () => {
   assert.throws(
     () => normalizedConfig({ ...rawConfig, KUBECONFIG: "relative.yaml" }),
     /absolute path/,
+  );
+  assert.throws(
+    () => normalizedConfig({ ...rawConfig, APP_IMAGE: "swr.example.test/app:mutable" }),
+    /APP_IMAGE must be an immutable/,
   );
 });
 
@@ -199,13 +204,10 @@ test("the fixed AgentSphere profile includes pause/resume and requires SFS Turbo
   );
 });
 
-test("fixed public OpenClaw Template image is recorded independently of config.env", () => {
-  assert.equal(
-    normalizedConfig({
-      ...rawConfig,
-      AGENTSPHERE_TEMPLATE_IMAGE: "target-tenant.example.test/ignored:latest",
-    }).AGENTSPHERE_TEMPLATE_IMAGE,
-    "swr.cn-south-1.myhuaweicloud.com/demo-test/onyxclaw-openclaw:0.3.8-channel-error-fix",
+test("APP image is required in config.env", () => {
+  assert.throws(
+    () => normalizedConfig({ ...rawConfig, APP_IMAGE: "" }),
+    /APP_IMAGE is required/,
   );
 });
 

@@ -194,12 +194,14 @@ SFS 创建后，使用 `scripts/prepare-sfs.sh` 初始化 `/onyxclaw/workspace` 
 当前稳定 OpenClaw 源镜像是公开镜像：
 
 ```text
-swr.cn-south-1.myhuaweicloud.com/demo-test/onyxclaw-openclaw:0.3.8-channel-error-fix
+swr.cn-south-1.myhuaweicloud.com/demo-test/onyxclaw-openclaw:0.3.9-channel-error-fix-v21
 ```
 
-在 AgentSphere 的“创建沙箱模板”页面，将这条完整 tag 直接粘贴到**选择镜像**输入框即可。它是公开镜像；
+在 AgentSphere 的“创建沙箱模板”页面，将这条完整 tag 直接粘贴到**选择镜像**输入框即可。该 tag 当前对应
+`sha256:8e314ad47a49eb57cab244fcbf52e456c4e8ae6d32e8bf732c6549bb083803e8`。它是公开镜像；
 不需要在目标租户创建 SWR 组织/仓库，也不需要拉取、重新推送或填写目标租户的 `image@sha256` 地址。
-该镜像不是 `config/config.env` 的用户输入，部署器会固定记录此版本，避免配置与实际 Template 镜像漂移。
+该镜像不是 `config/config.env` 的用户输入；它只用于在 AgentSphere 控制台人工创建 Template。APP 镜像版本则由
+`config/config.env` 的 `APP_IMAGE` 管理，且必须填写不可变 digest。
 
 ## 7. 在 AgentSphere 创建 Template
 

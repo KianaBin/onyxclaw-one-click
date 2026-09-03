@@ -14,10 +14,6 @@ const CONFIG_NAME = "onyxclaw-provider-config";
 const MANAGED_BY = "onyxclaw-one-click";
 const DEPLOYMENT_REGION = "cn-south-1";
 const DEPLOYMENT_NAMESPACE = "onyxclaw";
-const APP_IMAGE =
-  "swr.cn-south-1.myhuaweicloud.com/demo-test/onyxclaw-app:0.3.8-session-routing-debug-nodelay-wait5s-v19@sha256:fe0c5274fff79897fce53634756694edc9799f393e3e3dde416d604749788293";
-const AGENTSPHERE_TEMPLATE_IMAGE =
-  "swr.cn-south-1.myhuaweicloud.com/demo-test/onyxclaw-openclaw:0.3.8-channel-error-fix";
 const AGENTSPHERE_API_URL = "https://agentsphere.cn-south-1.myhuaweicloud.com";
 const CHANNEL_ELB_ANNOTATIONS = {
   "kubernetes.io/elb.class": "union",
@@ -114,7 +110,7 @@ function normalizedConfig(raw) {
     KUBECONFIG: required(raw, "KUBECONFIG"),
     NAMESPACE: raw.NAMESPACE?.trim() || DEPLOYMENT_NAMESPACE,
     REGION: DEPLOYMENT_REGION,
-    APP_IMAGE,
+    APP_IMAGE: required(raw, "APP_IMAGE"),
     REPLICAS: 1,
     AGENTSPHERE_API_URL,
     AGENTSPHERE_SANDBOX_URL: urlValue(
@@ -123,7 +119,6 @@ function normalizedConfig(raw) {
       ["https:", "http:"],
     ),
     AGENTSPHERE_TEMPLATE_ID: required(raw, "AGENTSPHERE_TEMPLATE_ID"),
-    AGENTSPHERE_TEMPLATE_IMAGE,
     APP_ACCESS_MODE: appAccessMode,
     APP_SERVICE_TYPE: appUsesPublicElb ? "LoadBalancer" : "NodePort",
     APP_SERVICE_ANNOTATIONS: appUsesPublicElb ? APP_PUBLIC_ELB_ANNOTATIONS : {},
@@ -369,7 +364,6 @@ function deploymentResource(config, configChecksum) {
       labels: resourceLabels({ "app.kubernetes.io/name": APP_NAME }),
       annotations: {
         "onyxclaw.io/agentsphere-template-id": config.AGENTSPHERE_TEMPLATE_ID,
-        "onyxclaw.io/agentsphere-template-image": config.AGENTSPHERE_TEMPLATE_IMAGE,
       },
     },
     spec: {
@@ -735,7 +729,6 @@ async function main(argv = process.argv.slice(2)) {
     `Target: context=${config.KUBE_CONTEXT || "<kubeconfig current-context>"} namespace=${config.NAMESPACE}`,
   );
   console.log(`APP image: ${config.APP_IMAGE}`);
-  console.log(`AgentSphere template image: ${config.AGENTSPHERE_TEMPLATE_IMAGE}`);
   console.log(`AgentSphere template: ${config.AGENTSPHERE_TEMPLATE_ID}`);
   if (args.dryRun) {
     const channel = config.CHANNEL_PUBLIC_URL === "auto"

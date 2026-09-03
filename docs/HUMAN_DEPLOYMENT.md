@@ -37,7 +37,7 @@ AgentSphere 控制台人工完成。
 
 | 文件 | 填什么 | 是否敏感 |
 | --- | --- | --- |
-| `config/config.env` | 目标集群、AgentSphere 与 SFS 的四项环境信息 | 有环境信息，不提交 |
+| `config/config.env` | 目标集群、AgentSphere 与 SFS 的四项环境信息，以及 APP 镜像 | 有环境信息，不提交 |
 | `config/secrets.env` | AgentSphere E2B API Key、模型 API Key | 是，不提交、不分享 |
 | `config/openclaw-base-config.json` | 随包生成的固定 DeepSeek/OpenClaw 基础配置 | 运行时会注入密钥；首次部署不需要编辑 |
 
@@ -49,13 +49,15 @@ AgentSphere 控制台人工完成。
 | AgentSphere | `AGENTSPHERE_SANDBOX_URL` | 已开启私网访问的智能体网关私网数据面 URL。 |
 | AgentSphere | `AGENTSPHERE_TEMPLATE_ID` | 控制台创建后的 Template ID。Template 的“选择镜像”直接使用固定公开 OpenClaw tag，不需要在此文件填写镜像地址。 |
 | SFS | `SFS_TURBO_ID` | 同一 VPC 中 SFS Turbo 的文件系统 ID。 |
+| APP | `APP_IMAGE` | APP 的 `image@sha256` 不可变引用。升级 APP 时只改此项，然后完成预检和 rollout。 |
 
 `config/secrets.env` 只需要用户填写 `AGENTSPHERE_E2B_API_KEY` 和 `MODEL_API_KEY`。不需要填写 Channel
 签名密钥或 Gateway token；部署器会使用内部占位符，稳定 APP 会在运行时初始化 Gateway token。
 
-为保证部署结果可复现，部署器固定使用华南-广州、`onyxclaw` namespace、已验证的 APP digest、DeepSeek
+为保证部署结果可复现，部署器固定使用华南-广州、`onyxclaw` namespace、DeepSeek
 `deepseek-v4-flash`、以及由 CCE 自动创建的私网 Channel ELB（`18890/TCP`）。默认 APP 入口是 NodePort
-`30080`；SFS workspace 固定为 `/onyxclaw/workspace`。这些不是首次部署的必填项。
+`30080`；SFS workspace 固定为 `/onyxclaw/workspace`。`APP_IMAGE` 是版本化输入，必须始终填写完整的
+`image@sha256` 引用；其余项不是首次部署的必填项。
 
 如果同一个 kubeconfig 保存多个集群，可额外填写可选 `KUBE_CONTEXT`；否则部署器使用该 kubeconfig 的
 `current-context`。需要隔离多个演示时也可选填 `NAMESPACE`，默认值为 `onyxclaw`。

@@ -2,15 +2,17 @@
 
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { parseEnvText } from "./deploy.mjs";
 
 const POD_NAME = "onyxclaw-sfs-prepare";
-const APP_IMAGE = "swr.cn-south-1.myhuaweicloud.com/demo-test/onyxclaw-app:0.3.8-session-routing-debug-nodelay-wait5s-v19@sha256:fe0c5274fff79897fce53634756694edc9799f393e3e3dde416d604749788293";
 
 export function parseArgs(argv) {
   const result = { namespace: "default", sharePath: "/onyxclaw/workspace" };
   const keys = {
     "--kubeconfig": "kubeconfig",
+    "--config": "configPath",
     "--context": "context",
     "--nfs-endpoint": "nfs_endpoint",
     "--share-path": "sharePath",
@@ -26,10 +28,12 @@ export function parseArgs(argv) {
     result[keys[key]] = value;
     index += 1;
   }
-  for (const name of ["kubeconfig", "nfs_endpoint"]) {
+  for (const name of ["configPath", "kubeconfig", "nfs_endpoint"]) {
     if (!result[name]) throw new Error(`--${name.replaceAll("_", "-")} is required`);
   }
-  if (!path.isAbsolute(result.kubeconfig)) throw new Error("--kubeconfig must be an absolute path");
+  for (const name of ["configPath", "kubeconfig"]) {
+    if (!path.isAbsolute(result[name])) throw new Error(`--${name === "configPath" ? "config" : "kubeconfig"} must be an absolute path`);
+  }
   if (result.context && !/^[A-Za-z0-9._-]+$/.test(result.context)) {
     throw new Error("--context contains unsafe characters");
   }
@@ -53,7 +57,15 @@ export function validateSharePath(value) {
   return value;
 }
 
-export function buildOverrides({ server, exportPath, sharePath }) {
+export function appImageFromConfig(configPath) {
+  const image = parseEnvText(readFileSync(configPath, "utf8"), configPath).APP_IMAGE?.trim();
+  if (!image || !/@sha256:[0-9a-f]{64}$/i.test(image)) {
+    throw new Error("APP_IMAGE in config must be an immutable image@sha256:<64-hex-digest> reference");
+  }
+  return image;
+}
+
+export function buildOverrides({ server, exportPath, sharePath, appImage }) {
   const mountedPath = `/sfs${sharePath}`;
   const testFile = `${mountedPath}/.onyxclaw-write-test`;
   const command = [
@@ -70,7 +82,7 @@ export function buildOverrides({ server, exportPath, sharePath }) {
       securityContext: { runAsUser: 0, runAsGroup: 0 },
       containers: [{
         name: POD_NAME,
-        image: APP_IMAGE,
+        image: appImage,
         securityContext: { runAsUser: 0, runAsGroup: 0 },
         command: ["sh", "-c", command],
         volumeMounts: [{ name: "sfs", mountPath: "/sfs" }],
@@ -96,16 +108,17 @@ function kubectl(config, args, { allowFailure = false } = {}) {
 export function main(argv = process.argv.slice(2)) {
   const config = parseArgs(argv);
   const endpoint = parseNfsEndpoint(config.nfs_endpoint);
+  const appImage = appImageFromConfig(config.configPath);
   const existing = kubectl(config, [
     "get", "pod", POD_NAME, "-n", config.namespace, "--ignore-not-found", "-o", "name",
   ]).stdout.trim();
   if (existing) throw new Error(`${config.namespace}/${POD_NAME} already exists; inspect it before retrying`);
 
-  const overrides = JSON.stringify(buildOverrides({ ...endpoint, sharePath: config.sharePath }));
+  const overrides = JSON.stringify(buildOverrides({ ...endpoint, sharePath: config.sharePath, appImage }));
   kubectl(config, [
     "run", POD_NAME,
     "-n", config.namespace,
-    `--image=${APP_IMAGE}`,
+    `--image=${appImage}`,
     "--restart=Never",
     `--overrides=${overrides}`,
   ]);

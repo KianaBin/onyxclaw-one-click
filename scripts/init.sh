@@ -24,4 +24,4 @@ create_from_example config.env.example config.env
 create_from_example secrets.env.example secrets.env
 create_from_example openclaw-base-config.example.json openclaw-base-config.json
 
-printf '请填写 config.env 的 4 项环境信息和 secrets.env 的 2 个 API Key；openclaw-base-config.json 无需编辑。然后执行 node scripts/deploy.mjs --config config/config.env --secrets config/secrets.env --dry-run\n'
+printf '请填写 config.env 的 4 项环境信息和 APP_IMAGE，以及 secrets.env 的 2 个 API Key；openclaw-base-config.json 无需编辑。然后执行 node scripts/deploy.mjs --config config/config.env --secrets config/secrets.env --dry-run\n'

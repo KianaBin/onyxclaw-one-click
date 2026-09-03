@@ -25,8 +25,9 @@ Template、CCE 到 AgentSphere 的网络、
 - 已创建智能体网关的私网 Sandbox 数据面 URL、人工创建后的 Template ID 和 E2B API Key；
 - 智能体网关已按[华为云创建智能体网关文档](https://support.huaweicloud.com/usermanual-agentsphere/agentsphere_03_0024.html)
   创建并开启私网访问，且它与 Template/Sandbox 使用同一 VPC 的确认结果；
-- 由目标用户自行申请的 DeepSeek API Key；模型、固定 APP digest、公开 OpenClaw Template 镜像、
-  Region、namespace、端口、Channel ELB 创建方式、SFS workspace 与 OpenClaw 基础配置均为交付包固定值；
+- 由目标用户自行申请的 DeepSeek API Key；公开 OpenClaw Template 镜像、Region、namespace、端口、
+  Channel ELB 创建方式、SFS workspace 与 OpenClaw 基础配置均为交付包固定值；APP 镜像由
+  `config/config.env` 的 `APP_IMAGE` 指定，且必须是不可变 digest；
 - AgentSphere Sandbox 所在子网到公网模型 Endpoint 的 NAT Gateway/SNAT 规则，以及 HTTPS
   出网连通性验证；
 - CCE 自动创建 Channel 私网 ELB 所需的网络条件；不预创建 ELB、`18890/TCP` 监听器或后端，全部交由

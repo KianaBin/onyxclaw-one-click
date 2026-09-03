@@ -56,7 +56,7 @@ kubeconfig、节点密码和 API Key 只能保存在本地受保护文件或凭�
 | 1. 选择路径与权限 | 选择上表路径；确认账号已开通 CCE、SFS Turbo、AgentSphere，且 Region 为 `cn-south-1`。 | 快速路径还需本地可用 AK/SK；其余路径按控制台权限执行。 |
 | 2. 创建基础设施 | 通过 Terraform 或控制台创建同一 VPC/子网中的 CCE、工作节点、NAT/SNAT 和 SFS Turbo；Terraform 可新建网络，也可复用已有网络。选择 APP 的浏览器入口。 | 节点为 Ready；Sandbox 子网可经 SNAT HTTPS 出网；取得 SFS ID 与 NFS 根路径。NodePort 需要节点 EIP；公网 ELB 由部署脚本后续创建并绑定 EIP。 |
 | 3. 完成人工控制台边界 | 从 CCE 下载 kubeconfig；在 AgentSphere 创建开启私网访问的网关；在同 VPC 创建 Template。 | 得到 kubeconfig、网关私网数据面 URL、Template ID。Template 的“选择镜像”直接填写固定公开 OpenClaw tag。 |
-| 4. 填写本地输入 | 运行 `./scripts/init.sh`。 | `config/config.env` 填 4 项；`config/secrets.env` 填 2 个 API Key。 |
+| 4. 填写本地输入 | 运行 `./scripts/init.sh`。 | `config/config.env` 填 4 项环境信息和不可变 `APP_IMAGE`；`config/secrets.env` 填 2 个 API Key。 |
 | 5. 准备与部署 | 初始化 SFS workspace；执行离线检查、集群预检、server dry-run 和正式部署。 | `SFS_PREPARE_OK`；APP Pod Ready；控制面和网关私网数据面 DNS 均可解析。 |
 | 6. 页面端到端验收 | 浏览器打开 APP，点击“进入龙虾模式”，进行对话、pause/resume 与 reset。 | Sandbox 创建、Channel 回连、模型回复、SFS 持久化与清理均有证据。 |
 | 7. 清理或保留 | 先在 APP reset Sandbox；再明确选择保留或按资源 ID 释放云资源。 | 不批量删除；Terraform 创建的资源先审阅 destroy plan。 |
@@ -88,7 +88,7 @@ kubeconfig、节点密码和 API Key 只能保存在本地受保护文件或凭�
 
 ```bash
 ./scripts/init.sh
-# 编辑 config/config.env：KUBECONFIG、网关私网 URL、Template ID、SFS Turbo ID
+# 编辑 config/config.env：KUBECONFIG、网关私网 URL、Template ID、SFS Turbo ID、APP_IMAGE
 # 编辑 config/secrets.env：AgentSphere E2B API Key、DeepSeek API Key
 
 # SFS 已创建后，使用控制台提供的 NFS 共享根路径初始化 workspace
