@@ -32,6 +32,9 @@ test("IaC selects either new or existing network resources and optionally manage
   assert.match(variables, /variable "existing_vpc_id"/);
   assert.match(variables, /variable "existing_subnet_id"/);
   assert.match(main, /network_mode=existing requires both existing_vpc_id and existing_subnet_id/);
+  assert.match(main, /trimspace\(var\.existing_vpc_id == null \? "" : var\.existing_vpc_id\)/);
+  assert.match(main, /trimspace\(var\.existing_subnet_id == null \? "" : var\.existing_subnet_id\)/);
+  assert.doesNotMatch(main, /coalesce\(var\.existing_(vpc|subnet)_id/);
 
   assert.match(variables, /variable "manage_snat"/);
   assert.match(egress, /resource "huaweicloud_nat_gateway" "this"/);
