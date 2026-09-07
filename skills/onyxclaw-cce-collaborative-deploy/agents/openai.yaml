@@ -1,0 +1,4 @@
+interface:
+  display_name: "OnyxClaw CCE 协作部署"
+  short_description: "协调路径 A 中 Terraform、人工闸门、向导与验收流程"
+  default_prompt: "使用 $onyxclaw-cce-collaborative-deploy 协作完成 OnyxClaw 的路径 A 部署；先识别当前阶段与需要我确认的事项。"

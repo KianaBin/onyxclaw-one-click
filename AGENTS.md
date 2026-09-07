@@ -4,8 +4,12 @@
 [`docs/AGENT_DEPLOYMENT.md`](./docs/AGENT_DEPLOYMENT.md)。它定义了所需输入、密钥处理、只读预检、
 唯一写入口、验收证据与停止条件。
 
-支持 Skill 的 Agent 可额外使用 [`skills/onyxclaw-cce-deploy/SKILL.md`](./skills/onyxclaw-cce-deploy/SKILL.md)
-编排完整部署闭环；该 Skill 只能调用本仓库已有入口，不能成为第二套配置或写操作路径。
+人工操作者可运行 [`scripts/onyxclaw-cce-setup-wizard.sh`](./scripts/onyxclaw-cce-setup-wizard.sh)，
+按阶段完成控制台边界、最小配置录入与安全预检；该向导只能调用本仓库已有入口，不能成为第二套配置或写操作路径。
+
+当目标是路径 A（Terraform + Agent）且需要人机跨阶段协作时，可使用
+[`skills/onyxclaw-cce-collaborative-deploy/SKILL.md`](./skills/onyxclaw-cce-collaborative-deploy/SKILL.md)
+编排授权闸门、人工控制台边界与验收状态；该 Skill 不替代 Terraform、wizard 或部署入口。
 
 若目标是全新华为云账号或空环境，先完整阅读
 [`docs/CLOUD_PREREQUISITES.md`](./docs/CLOUD_PREREQUISITES.md)，并将其中的云资源创建和 Template

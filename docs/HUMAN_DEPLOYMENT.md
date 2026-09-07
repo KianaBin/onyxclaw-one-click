@@ -4,6 +4,14 @@
 [云资源前置条件](./CLOUD_PREREQUISITES.md)。部署入口、文件职责与 Agent 路径见项目根目录
 [`README.md`](../README.md)。
 
+如果希望由交互式脚本逐项打开控制台文档、收集前置资源输出、填写唯一的 `config/` 并运行安全预检，请从项目根目录执行：
+
+```bash
+./scripts/onyxclaw-cce-setup-wizard.sh
+```
+
+它不会执行 Terraform `apply` 或正式 Kubernetes 部署；正式部署仍只经本手册第 3 节的 `scripts/deploy.sh`。
+
 ## 架构与责任边界
 
 ```mermaid
